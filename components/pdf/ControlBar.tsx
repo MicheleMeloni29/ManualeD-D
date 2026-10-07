@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   BookOpen,
   ChevronLeft,
@@ -76,22 +76,19 @@ export function ControlBar({
   resolvedTheme,
   onThemeChange,
 }: ControlBarProps) {
-  const [pageInput, setPageInput] = useState<string>(String(currentPage));
+  const [editingPageInput, setEditingPageInput] = useState<string | null>(null);
   const [mobileZoomSheetOpen, setMobileZoomSheetOpen] =
     useState<boolean>(false);
 
-  // Sincronizza l'input testuale quando la pagina corrente cambia
-  useEffect(() => {
-    setPageInput(String(currentPage));
-  }, [currentPage]);
+  const pageInput = editingPageInput ?? String(currentPage);
 
   const handlePageSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsed = parseInt(pageInput, 10);
+    if (editingPageInput === null) return;
+    const parsed = parseInt(editingPageInput, 10);
+    setEditingPageInput(null);
     if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= numPages) {
       onGoToPage(parsed);
-    } else {
-      setPageInput(String(currentPage));
     }
   };
 
@@ -194,7 +191,7 @@ export function ControlBar({
                   type="text"
                   inputMode="numeric"
                   value={pageInput}
-                  onChange={(e) => setPageInput(e.target.value)}
+                  onChange={(e) => setEditingPageInput(e.target.value)}
                   onBlur={handlePageSubmit}
                   aria-label="Numero di pagina"
                   className={`w-12 h-7 text-center rounded-md font-mono text-xs font-semibold border focus:outline-none focus:ring-2 focus:ring-stone-500 transition ${
@@ -586,7 +583,7 @@ export function ControlBar({
               type="text"
               inputMode="numeric"
               value={pageInput}
-              onChange={(e) => setPageInput(e.target.value)}
+              onChange={(e) => setEditingPageInput(e.target.value)}
               onBlur={handlePageSubmit}
               aria-label="Vai a pagina"
               className="w-12 h-8 text-center rounded-lg font-semibold bg-white dark:bg-zinc-800 border border-stone-300 dark:border-zinc-700 text-stone-900 dark:text-zinc-100 text-xs"

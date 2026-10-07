@@ -17,6 +17,39 @@ export interface UsePdfNavigationOptions {
   outline?: OutlineItem[];
 }
 
+function loadSavedPage(maxPages: number): number {
+  if (typeof window === "undefined") return 1;
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_LAST_PAGE);
+    if (saved) {
+      const parsed = parseInt(saved, 10);
+      if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= maxPages) {
+        return parsed;
+      }
+    }
+  } catch {
+    // Ignora errori storage
+  }
+  return 1;
+}
+
+function loadSavedViewMode(): ViewMode {
+  if (typeof window === "undefined") return "continuous";
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_VIEW_MODE);
+    if (
+      saved === "continuous" ||
+      saved === "single" ||
+      saved === "book"
+    ) {
+      return saved;
+    }
+  } catch {
+    // Ignora errori storage
+  }
+  return "continuous";
+}
+
 /**
  * Risolve il capitolo o sottocapitolo attivo per una determinata pagina
  */
@@ -46,8 +79,10 @@ export function usePdfNavigation({
   outline = [],
 }: UsePdfNavigationOptions = {}) {
   const [numPages, setNumPages] = useState<number>(initialTotalPages);
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [viewMode, setViewModeState] = useState<ViewMode>("continuous");
+  const [currentPage, setCurrentPage] = useState<number>(() =>
+    loadSavedPage(initialTotalPages)
+  );
+  const [viewMode, setViewModeState] = useState<ViewMode>(loadSavedViewMode);
   const [zoomMode, setZoomMode] = useState<ZoomMode>("fit-width");
   const [customScale, setCustomScale] = useState<number>(1.0);
   // Permette di usare la rotella diretta per lo zoom anche in modalità "Continuo"
@@ -80,33 +115,14 @@ export function usePdfNavigation({
     null
   );
 
-  // Ripristina ultima pagina letta e modalità vista dal localStorage al mount
+  // Al primo mount posiziona lo scroll del viewer sulla pagina salvata (senza chiamare setState nell'effect)
   useEffect(() => {
-    try {
-      const savedPage = localStorage.getItem(STORAGE_KEY_LAST_PAGE);
-      if (savedPage) {
-        const parsed = parseInt(savedPage, 10);
-        if (
-          !Number.isNaN(parsed) &&
-          parsed >= 1 &&
-          parsed <= initialTotalPages
-        ) {
-          setCurrentPage(parsed);
-          setTimeout(() => {
-            scrollToPageHandlerRef.current?.(parsed);
-          }, 150);
-        }
-      }
-      const savedMode = localStorage.getItem(STORAGE_KEY_VIEW_MODE);
-      if (
-        savedMode === "continuous" ||
-        savedMode === "single" ||
-        savedMode === "book"
-      ) {
-        setViewModeState(savedMode);
-      }
-    } catch {
-      // Ignora errori di storage in contesti privati
+    const initialPage = loadSavedPage(initialTotalPages);
+    if (initialPage > 1) {
+      const timer = setTimeout(() => {
+        scrollToPageHandlerRef.current?.(initialPage);
+      }, 150);
+      return () => clearTimeout(timer);
     }
   }, [initialTotalPages]);
 

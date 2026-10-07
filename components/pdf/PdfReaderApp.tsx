@@ -35,7 +35,9 @@ const METADATA_URL = "/pdf-metadata.json";
 export function PdfReaderApp() {
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [pagesText, setPagesText] = useState<PageTextEntry[]>([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(
+    () => typeof window !== "undefined" && window.innerWidth >= 1280
+  );
 
   const { themeMode, setThemeMode, resolvedTheme } = useThemeMode();
 
@@ -108,13 +110,6 @@ export function PdfReaderApp() {
     removeBookmark,
     updateBookmarkLabel,
   } = useBookmarks();
-
-  // Su desktop apriamo l'indice di default al primo avvio per facilitare l'esplorazione
-  useEffect(() => {
-    if (typeof window !== "undefined" && window.innerWidth >= 1280) {
-      setIsSidebarOpen(true);
-    }
-  }, []);
 
   // Carica l'indice dei capitoli e il testo pre-indicizzato delle 321 pagine
   useEffect(() => {

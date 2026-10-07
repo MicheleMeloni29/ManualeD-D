@@ -50,17 +50,34 @@ export function usePdfSearch({
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
   const [query, setQuery] = useState<string>("");
   const [debouncedQuery, setDebouncedQuery] = useState<string>("");
-  const [exactWord, setExactWord] = useState<boolean>(false);
-  const [caseSensitive, setCaseSensitive] = useState<boolean>(false);
+  const [exactWord, setExactWordState] = useState<boolean>(false);
+  const [caseSensitive, setCaseSensitiveState] = useState<boolean>(false);
   const [activeMatchIndex, setActiveMatchIndex] = useState<number>(0);
 
   // Debounce leggero (120ms) per mantenere l'input reattivo durante la digitazione
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(query.trim());
+      setActiveMatchIndex(0);
     }, 120);
     return () => clearTimeout(timer);
   }, [query]);
+
+  const setExactWord = useCallback(
+    (updater: boolean | ((prev: boolean) => boolean)) => {
+      setExactWordState(updater);
+      setActiveMatchIndex(0);
+    },
+    []
+  );
+
+  const setCaseSensitive = useCallback(
+    (updater: boolean | ((prev: boolean) => boolean)) => {
+      setCaseSensitiveState(updater);
+      setActiveMatchIndex(0);
+    },
+    []
+  );
 
   // Calcola tutte le occorrenze su tutte le 321 pagine
   const matches = useMemo<SearchMatch[]>(() => {
@@ -120,20 +137,22 @@ export function usePdfSearch({
     return results;
   }, [debouncedQuery, exactWord, caseSensitive, pagesText, outline]);
 
-  // Quando cambiano i risultati, salta automaticamente al primo risultato
+  // Quando cambiano i risultati, salta automaticamente alla pagina del primo risultato
   useEffect(() => {
     if (matches.length > 0) {
-      setActiveMatchIndex(0);
       onNavigateToPage(matches[0].pageNumber);
-    } else {
-      setActiveMatchIndex(0);
     }
   }, [matches, onNavigateToPage]);
 
+  const safeActiveMatchIndex = useMemo(() => {
+    if (matches.length === 0) return 0;
+    return Math.min(activeMatchIndex, matches.length - 1);
+  }, [matches.length, activeMatchIndex]);
+
   const activeMatch = useMemo<SearchMatch | null>(() => {
     if (matches.length === 0) return null;
-    return matches[Math.min(activeMatchIndex, matches.length - 1)] ?? null;
-  }, [matches, activeMatchIndex]);
+    return matches[safeActiveMatchIndex] ?? null;
+  }, [matches, safeActiveMatchIndex]);
 
   // Mappa veloce pageNumber -> numero di occorrenze sulla pagina
   const matchesByPage = useMemo(() => {
@@ -169,12 +188,12 @@ export function usePdfSearch({
   );
 
   const nextMatch = useCallback(() => {
-    selectMatch(activeMatchIndex + 1);
-  }, [activeMatchIndex, selectMatch]);
+    selectMatch(safeActiveMatchIndex + 1);
+  }, [safeActiveMatchIndex, selectMatch]);
 
   const prevMatch = useCallback(() => {
-    selectMatch(activeMatchIndex - 1);
-  }, [activeMatchIndex, selectMatch]);
+    selectMatch(safeActiveMatchIndex - 1);
+  }, [safeActiveMatchIndex, selectMatch]);
 
   const openSearch = useCallback(() => {
     setIsSearchOpen(true);
@@ -209,7 +228,7 @@ export function usePdfSearch({
     matches,
     matchesByPage,
     pagesWithMatchesCount,
-    activeMatchIndex,
+    activeMatchIndex: safeActiveMatchIndex,
     activeMatch,
     selectMatch,
     nextMatch,

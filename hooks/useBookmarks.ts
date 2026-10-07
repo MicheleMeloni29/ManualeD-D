@@ -1,29 +1,45 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, useMemo, useSyncExternalStore } from "react";
 import type { BookmarkItem } from "@/types/pdf";
 
 const STORAGE_KEY_BOOKMARKS = "manuale_dnd_bookmarks_v1";
 
-export function useBookmarks() {
-  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY_BOOKMARKS);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          setBookmarks(parsed);
-        }
+function loadInitialBookmarks(): BookmarkItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_BOOKMARKS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed;
       }
-    } catch {
-      // Ignora errori di parsing/storage
     }
-  }, []);
+  } catch {
+    // Ignora errori di parsing/storage
+  }
+  return [];
+}
+
+const emptySubscribe = () => () => {};
+
+export function useBookmarks() {
+  const isHydrated = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
+
+  const [bookmarksState, setBookmarksState] =
+    useState<BookmarkItem[]>(loadInitialBookmarks);
+
+  const bookmarks = useMemo(
+    () => (isHydrated ? bookmarksState : []),
+    [isHydrated, bookmarksState]
+  );
 
   const persistBookmarks = useCallback((next: BookmarkItem[]) => {
-    setBookmarks(next);
+    setBookmarksState(next);
     try {
       localStorage.setItem(STORAGE_KEY_BOOKMARKS, JSON.stringify(next));
     } catch {
@@ -50,7 +66,8 @@ export function useBookmarks() {
         const newItem: BookmarkItem = {
           id: `bm-${pageNumber}-${Date.now()}`,
           pageNumber,
-          label: customLabel?.trim() || chapterTitle || `Pagina ${pageNumber}`,
+          label:
+            customLabel?.trim() || chapterTitle || `Pagina ${pageNumber}`,
           chapterTitle,
           createdAt: Date.now(),
         };

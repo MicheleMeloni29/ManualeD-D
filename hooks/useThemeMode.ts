@@ -1,36 +1,62 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, useSyncExternalStore } from "react";
 import type { ThemeMode } from "@/types/pdf";
 
 const STORAGE_KEY_THEME = "manuale_dnd_theme_v1";
 
-export function useThemeMode() {
-  const [themeMode, setThemeModeState] = useState<ThemeMode>("system");
-  const [systemDark, setSystemDark] = useState<boolean>(false);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_THEME) as ThemeMode | null;
-      if (
-        saved === "system" ||
-        saved === "light" ||
-        saved === "dark" ||
-        saved === "sepia"
-      ) {
-        setThemeModeState(saved);
-      }
-    } catch {
-      // Ignora errori storage
+function loadInitialTheme(): ThemeMode {
+  if (typeof window === "undefined") return "system";
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_THEME) as ThemeMode | null;
+    if (
+      saved === "system" ||
+      saved === "light" ||
+      saved === "dark" ||
+      saved === "sepia"
+    ) {
+      return saved;
     }
+  } catch {
+    // Ignora errori storage
+  }
+  return "system";
+}
 
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    setSystemDark(mq.matches);
+function subscribeColorScheme(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  mq.addEventListener("change", callback);
+  return () => mq.removeEventListener("change", callback);
+}
 
-    const listener = (e: MediaQueryListEvent) => setSystemDark(e.matches);
-    mq.addEventListener("change", listener);
-    return () => mq.removeEventListener("change", listener);
-  }, []);
+function getColorSchemeSnapshot(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function getColorSchemeServerSnapshot(): boolean {
+  return false;
+}
+
+const emptySubscribe = () => () => {};
+
+export function useThemeMode() {
+  const isHydrated = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
+  const systemDark = useSyncExternalStore(
+    subscribeColorScheme,
+    getColorSchemeSnapshot,
+    getColorSchemeServerSnapshot
+  );
+
+  const [themeModeState, setThemeModeState] =
+    useState<ThemeMode>(loadInitialTheme);
+
+  const themeMode: ThemeMode = isHydrated ? themeModeState : "system";
 
   const setThemeMode = useCallback((mode: ThemeMode) => {
     setThemeModeState(mode);

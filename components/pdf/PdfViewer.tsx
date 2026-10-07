@@ -95,7 +95,6 @@ export default function PdfViewer({
   turnAnimation,
   viewMode,
   effectiveScale,
-  zoomPercentage,
   wheelZoomInContinuous,
   onToggleWheelZoomInContinuous,
   onZoomIn,
@@ -167,10 +166,7 @@ export default function PdfViewer({
 
     const handleWheel = (e: WheelEvent) => {
       const isTrackpadPinchOrModifier = e.ctrlKey || e.metaKey || e.altKey;
-      const isDirectWheelZoomActive =
-        viewMode === "book" ||
-        viewMode === "single" ||
-        wheelZoomInContinuous;
+      const isDirectWheelZoomActive = wheelZoomInContinuous;
 
       if (!isTrackpadPinchOrModifier && !isDirectWheelZoomActive) {
         return;
@@ -198,7 +194,7 @@ export default function PdfViewer({
 
     container.addEventListener("wheel", handleWheel, { passive: false });
     return () => container.removeEventListener("wheel", handleWheel);
-  }, [viewMode, wheelZoomInContinuous, effectiveScale, onSetExactZoom]);
+  }, [wheelZoomInContinuous, effectiveScale, onSetExactZoom]);
 
   // Registra l'handler per saltare programmaticamente a una pagina specifica
   useEffect(() => {
@@ -499,27 +495,25 @@ export default function PdfViewer({
 
       {/* CONTROLLI ZOOM FLOTTANTI SEMPRE ACCESSIBILI (Ideali senza mouse o su touch/trackpad) */}
       <div className="fixed bottom-20 md:bottom-5 right-4 z-30 flex items-center gap-1 p-1.5 rounded-2xl border shadow-xl backdrop-blur-xl bg-white/90 dark:bg-zinc-900/90 border-stone-200/90 dark:border-zinc-800 text-stone-900 dark:text-zinc-100 select-none">
-        {viewMode === "continuous" && (
-          <button
-            type="button"
-            onClick={onToggleWheelZoomInContinuous}
-            title={
-              wheelZoomInContinuous
-                ? "Rotella mouse impostata su Zoom diretto (Clicca per tornare a Scroll normale)"
-                : "Attiva Zoom diretto con la rotella del mouse anche in Scorrimento Continuo"
-            }
-            className={`hidden sm:flex items-center gap-1 px-2 py-1.5 rounded-xl text-[11px] font-medium transition ${
-              wheelZoomInContinuous
-                ? "bg-amber-500 text-stone-950 font-semibold"
-                : "opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10"
-            }`}
-          >
-            <Mouse className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">
-              {wheelZoomInContinuous ? "Rotella: Zoom" : "Ctrl+Rotella"}
-            </span>
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onToggleWheelZoomInContinuous}
+          title={
+            wheelZoomInContinuous
+              ? "Rotella mouse impostata su Zoom diretto (Clicca per tornare a Ctrl+Rotella)"
+              : "Zoom con Ctrl+Rotella attivo (Clicca per fare Zoom con la sola rotella)"
+          }
+          className={`hidden sm:flex items-center gap-1 px-2 py-1.5 rounded-xl text-[11px] font-medium transition ${
+            wheelZoomInContinuous
+              ? "bg-amber-500 text-stone-950 font-semibold"
+              : "opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10"
+          }`}
+        >
+          <Mouse className="w-3.5 h-3.5" />
+          <span className="hidden lg:inline">
+            {wheelZoomInContinuous ? "Rotella: Zoom" : "Ctrl+Rotella"}
+          </span>
+        </button>
 
         <button
           type="button"
@@ -866,36 +860,6 @@ export default function PdfViewer({
                         />
                       )}
 
-                      {/* Zona interattiva sul margine esterno per sfogliare cliccando il bordo pagina */}
-                      {(isLeftPage || (!isDouble && pageNum > 1)) && (
-                        <button
-                          type="button"
-                          onClick={onPrevPage}
-                          title="Clicca per sfogliare alla pagina precedente"
-                          aria-label="Sfoglia indietro"
-                          className="group absolute inset-y-0 left-0 w-9 z-20 flex items-center justify-start pl-1.5 opacity-0 hover:opacity-100 transition-opacity cursor-pointer bg-gradient-to-r from-black/15 to-transparent"
-                        >
-                          <span className="p-1 rounded-full bg-black/50 text-white shadow-md">
-                            <ChevronLeft className="w-3.5 h-3.5" />
-                          </span>
-                        </button>
-                      )}
-
-                      {(isRightPage ||
-                        (!isDouble && pageNum < numPages)) && (
-                        <button
-                          type="button"
-                          onClick={onNextPage}
-                          title="Clicca per sfogliare alla pagina successiva"
-                          aria-label="Sfoglia avanti"
-                          className="group absolute inset-y-0 right-0 w-9 z-20 flex items-center justify-end pr-1.5 opacity-0 hover:opacity-100 transition-opacity cursor-pointer bg-gradient-to-l from-black/15 to-transparent"
-                        >
-                          <span className="p-1 rounded-full bg-black/50 text-white shadow-md">
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          </span>
-                        </button>
-                      )}
-
                       {/* Rendering Canvas + Text Layer PDF.js */}
                       {isDocumentLoaded ? (
                         <Page
@@ -975,7 +939,7 @@ export default function PdfViewer({
                 </span>
                 <span className="hidden sm:inline">•</span>
                 <span className="hidden sm:inline">
-                  Rotella mouse o tasti Z / X (+ / -) per fare Zoom • Frecce ← / → per sfogliare
+                  Ctrl+Rotella o tasti Z / X (+ / -) per fare Zoom • Frecce ← / → per sfogliare
                 </span>
               </div>
 
