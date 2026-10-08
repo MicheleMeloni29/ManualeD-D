@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fafaf9;
-  --foreground: #1c1917;
+  --background: #f6efe2;
+  --foreground: #241710;
 }
 
 @theme inline {
@@ -14,8 +14,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #09090b;
-    --foreground: #f4f4f5;
+    --background: #120e0c;
+    --foreground: #ede2d0;
   }
 }
 
@@ -24,6 +24,144 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   overflow: hidden;
+}
+
+/* ==========================================================================
+   CONTORNI E FILETTI DORATI/CREMISI STILE MANUALE D&D 5E
+   ========================================================================== */
+
+.dnd-frame-light {
+  border-color: rgba(184, 138, 56, 0.55);
+  box-shadow:
+    inset 0 0 0 1px rgba(226, 198, 138, 0.55),
+    0 2px 10px -2px rgba(62, 34, 14, 0.08);
+}
+
+.dnd-frame-sepia {
+  border-color: rgba(168, 118, 38, 0.68);
+  box-shadow:
+    inset 0 0 0 1px rgba(218, 184, 116, 0.65),
+    0 2px 12px -2px rgba(58, 32, 10, 0.14);
+}
+
+.dnd-frame-dark {
+  border-color: rgba(154, 114, 46, 0.48);
+  box-shadow:
+    inset 0 0 0 1px rgba(92, 66, 26, 0.45),
+    0 4px 16px -2px rgba(0, 0, 0, 0.55);
+}
+
+/* ==========================================================================
+   SCROLLBAR PERSONALIZZATE A TEMA D&D 5E (Oro Antico & Cremisi in Hover)
+   ========================================================================== */
+
+/* Dimensioni base per WebKit / Blink (Chrome, Edge, Brave, Safari, Opera) */
+.dnd-scrollbar-main::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.dnd-scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.dnd-scrollbar-main::-webkit-scrollbar-button,
+.dnd-scrollbar-thin::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* 1. TEMA CHIARO (Pergamena Reale: Oro Antico -> Rosso Drago in Hover) */
+.dnd-scrollbar-light::-webkit-scrollbar-track {
+  background-color: #efe4ce;
+  border-left: 1px solid rgba(198, 157, 75, 0.45);
+}
+
+.dnd-scrollbar-light::-webkit-scrollbar-thumb {
+  background-color: #c29643;
+  border: 2px solid #efe4ce;
+  box-shadow: inset 0 0 0 1px #e7c986;
+  border-radius: 9999px;
+}
+
+.dnd-scrollbar-light::-webkit-scrollbar-thumb:hover,
+.dnd-scrollbar-light::-webkit-scrollbar-thumb:active {
+  background-color: #8c1d14;
+  border-color: #d4a74a;
+  box-shadow: inset 0 0 0 1px #f3d285;
+}
+
+.dnd-scrollbar-light::-webkit-scrollbar-corner {
+  background-color: #efe4ce;
+}
+
+/* 2. TEMA SEPPIA (Grimorio 5e: Bronzo Antico -> Rosso Rubino in Hover) */
+.dnd-scrollbar-sepia::-webkit-scrollbar-track {
+  background-color: #dfd0ae;
+  border-left: 1px solid rgba(176, 128, 46, 0.55);
+}
+
+.dnd-scrollbar-sepia::-webkit-scrollbar-thumb {
+  background-color: #a67626;
+  border: 2px solid #dfd0ae;
+  box-shadow: inset 0 0 0 1px #dec082;
+  border-radius: 9999px;
+}
+
+.dnd-scrollbar-sepia::-webkit-scrollbar-thumb:hover,
+.dnd-scrollbar-sepia::-webkit-scrollbar-thumb:active {
+  background-color: #7d1911;
+  border-color: #d4a74a;
+  box-shadow: inset 0 0 0 1px #f0cf80;
+}
+
+.dnd-scrollbar-sepia::-webkit-scrollbar-corner {
+  background-color: #dfd0ae;
+}
+
+/* 3. TEMA SCURO (Dungeon: Oro Brunito -> Rosso Drago in Hover) */
+.dnd-scrollbar-dark::-webkit-scrollbar-track {
+  background-color: #16110e;
+  border-left: 1px solid rgba(138, 101, 41, 0.42);
+}
+
+.dnd-scrollbar-dark::-webkit-scrollbar-thumb {
+  background-color: #785622;
+  border: 2px solid #16110e;
+  box-shadow: inset 0 0 0 1px #b0833a;
+  border-radius: 9999px;
+}
+
+.dnd-scrollbar-dark::-webkit-scrollbar-thumb:hover,
+.dnd-scrollbar-dark::-webkit-scrollbar-thumb:active {
+  background-color: #8c1d14;
+  border-color: #d4a74a;
+  box-shadow: inset 0 0 0 1px #e5be67;
+}
+
+.dnd-scrollbar-dark::-webkit-scrollbar-corner {
+  background-color: #16110e;
+}
+
+/* Fallback dedicato esclusivamente a Firefox (non disabilita ::-webkit-scrollbar su Chrome/Edge) */
+@supports (-moz-appearance: none) {
+  .dnd-scrollbar-main {
+    scrollbar-width: auto;
+  }
+  .dnd-scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  .dnd-scrollbar-light {
+    scrollbar-color: #c29643 #efe4ce;
+  }
+  .dnd-scrollbar-sepia {
+    scrollbar-color: #a67626 #dfd0ae;
+  }
+  .dnd-scrollbar-dark {
+    scrollbar-color: #785622 #16110e;
+  }
 }
 
 /* Stili per l'evidenziazione della ricerca direttamente sul Text Layer di PDF.js */
@@ -44,7 +182,7 @@ body {
 
 /* Selezione testo nitida sul PDF */
 .react-pdf__Page__textContent ::selection {
-  background: rgba(59, 130, 246, 0.28);
+  background: rgba(180, 83, 9, 0.26);
 }
 
 /* ==========================================================================

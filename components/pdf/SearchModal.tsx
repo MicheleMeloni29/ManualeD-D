@@ -92,10 +92,13 @@ export function SearchModal({
 
   const panelSurface =
     resolvedTheme === "dark"
-      ? "bg-zinc-900/95 border-zinc-800 text-zinc-100"
+      ? "bg-[#1a1411]/95 text-[#ede2d0] dnd-frame-dark"
       : resolvedTheme === "sepia"
-      ? "bg-[#f4ecd8]/95 border-[#dfcfb0] text-stone-900"
-      : "bg-white/95 border-stone-200 text-stone-900";
+      ? "bg-[#f3e5c8]/95 text-[#2a180d] dnd-frame-sepia"
+      : "bg-[#fbf6eb]/95 text-[#24160e] dnd-frame-light";
+
+  const activeDndToggle =
+    "bg-[#8c1d14] text-[#fdf6e6] border-[#d4a74a] font-semibold";
 
   const trimmedQuery = query.trim();
 
@@ -106,7 +109,7 @@ export function SearchModal({
       className={`fixed top-16 right-3 left-3 sm:left-auto sm:w-[390px] z-40 rounded-2xl border shadow-2xl backdrop-blur-xl flex flex-col max-h-[calc(100dvh-9rem)] md:max-h-[calc(100dvh-5.5rem)] transition-all duration-200 ${panelSurface}`}
     >
       {/* Barra Superiore di Input + Navigazione Occorrenze */}
-      <div className="p-3 border-b border-current/10 space-y-2.5">
+      <div className="p-3 border-b border-[#c59b27]/35 space-y-2.5">
         <div className="flex items-center gap-1.5">
           <div className="relative flex-1">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-50" />
@@ -117,7 +120,7 @@ export function SearchModal({
               onChange={(e) => onQueryChange(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Cerca parola o regola (es. Palla di Fuoco)..."
-              className="w-full pl-9 pr-8 py-2 rounded-xl text-xs sm:text-sm bg-black/5 dark:bg-white/5 border border-transparent focus:border-amber-500/60 focus:outline-none"
+              className="w-full pl-9 pr-8 py-2 rounded-xl text-xs sm:text-sm bg-black/5 dark:bg-white/5 border border-[#c59b27]/40 focus:border-[#8c1d14] dark:focus:border-[#d4a74a] focus:outline-none"
             />
             {query && (
               <button
@@ -135,7 +138,7 @@ export function SearchModal({
           </div>
 
           {/* Pulsanti Precedente / Successivo tra i risultati */}
-          <div className="flex items-center gap-0.5 bg-black/5 dark:bg-white/5 p-1 rounded-xl shrink-0">
+          <div className="flex items-center gap-0.5 bg-black/5 dark:bg-white/5 border border-[#c59b27]/30 p-1 rounded-xl shrink-0">
             <button
               type="button"
               onClick={onPrevMatch}
@@ -178,8 +181,8 @@ export function SearchModal({
               title="Cerca solo parola intera esatta"
               className={`px-2.5 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1 border transition ${
                 exactWord
-                  ? "bg-amber-500 text-stone-950 border-amber-500 font-semibold"
-                  : "border-current/15 opacity-75 hover:opacity-100"
+                  ? activeDndToggle
+                  : "border-[#c59b27]/35 opacity-75 hover:opacity-100"
               }`}
             >
               <WholeWord className="w-3.5 h-3.5" />
@@ -190,10 +193,10 @@ export function SearchModal({
               type="button"
               onClick={onToggleCaseSensitive}
               title="Distingui maiuscole e minuscole"
-              className={`px-2 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1 border transition ${
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1 border transition ${
                 caseSensitive
-                  ? "bg-amber-500 text-stone-950 border-amber-500 font-semibold"
-                  : "border-current/15 opacity-75 hover:opacity-100"
+                  ? activeDndToggle
+                  : "border-[#c59b27]/35 opacity-75 hover:opacity-100"
               }`}
             >
               <CaseSensitive className="w-3.5 h-3.5" />
@@ -222,7 +225,7 @@ export function SearchModal({
                 }
                 className={`p-1 rounded-lg border transition ${
                   showSnippetsList
-                    ? "border-current/25 bg-black/5 dark:bg-white/10"
+                    ? "border-[#c59b27]/50 bg-[#c59b27]/15"
                     : "border-transparent opacity-60 hover:opacity-100"
                 }`}
               >
@@ -235,7 +238,9 @@ export function SearchModal({
 
       {/* Lista Espandibile degli Estratti Testuali (Snippets) */}
       {showSnippetsList && trimmedQuery.length >= 2 && (
-        <div className="flex-1 overflow-y-auto p-2 space-y-1.5 max-h-[52vh] sm:max-h-[60vh]">
+        <div
+          className={`flex-1 overflow-y-auto dnd-scrollbar-thin dnd-scrollbar-${resolvedTheme} p-2 space-y-1.5 max-h-[52vh] sm:max-h-[60vh]`}
+        >
           {matches.length === 0 ? (
             <div className="py-8 px-4 text-center space-y-1 opacity-60">
               <p className="text-xs font-medium">
@@ -267,18 +272,18 @@ export function SearchModal({
                   }}
                   className={`w-full text-left p-2.5 rounded-xl border transition flex flex-col gap-1 ${
                     isSelected
-                      ? "border-amber-500 bg-amber-500/15 shadow-xs"
-                      : "border-current/10 hover:bg-black/5 dark:hover:bg-white/5"
+                      ? "border-[#8c1d14]/70 dark:border-[#d4a74a]/80 bg-[#8c1d14]/10 dark:bg-[#d4a74a]/10 shadow-xs"
+                      : "border-[#c59b27]/30 hover:bg-[#c59b27]/10"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-medium opacity-65 truncate">
+                    <span className="text-[11px] font-medium opacity-70 truncate">
                       {match.chapterTitle || "Manuale del Giocatore"}
                     </span>
                     <span
                       className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
                         isSelected
-                          ? "bg-amber-500 text-stone-950"
+                          ? "bg-[#8c1d14] text-[#fdf6e6] border border-[#d4a74a]/70"
                           : "bg-black/10 dark:bg-white/10"
                       }`}
                     >

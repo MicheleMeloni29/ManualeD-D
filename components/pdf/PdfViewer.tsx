@@ -20,10 +20,22 @@ import {
   ZoomOut,
   RotateCcw,
   Mouse,
+  Highlighter,
+  Undo2,
+  X,
 } from "lucide-react";
-import type { SearchMatch, ViewMode } from "@/types/pdf";
+import type {
+  BookmarkItem,
+  HighlightColor,
+  NormalizedRect,
+  SearchMatch,
+  ViewMode,
+} from "@/types/pdf";
+import { HIGHLIGHT_COLORS } from "@/types/pdf";
 import { buildSearchRegex } from "@/hooks/usePdfSearch";
 import { MIN_ZOOM, MAX_ZOOM } from "@/hooks/usePdfNavigation";
+import type { AddHighlightBookmarkInput } from "@/hooks/useBookmarks";
+import { PageHighlightsLayer } from "./PageHighlightsLayer";
 
 // Configura il worker PDF.js locale nello stesso modulo in cui sono usati <Document> e <Page>
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -38,7 +50,6 @@ export interface PdfViewerProps {
   turnAnimation: { direction: "next" | "prev"; tick: number } | null;
   viewMode: ViewMode;
   effectiveScale: number;
-  zoomPercentage: number;
   wheelZoomInContinuous: boolean;
   onToggleWheelZoomInContinuous: () => void;
   onZoomIn: () => void;
@@ -58,7 +69,28 @@ export interface PdfViewerProps {
   caseSensitive: boolean;
   activeMatch: SearchMatch | null;
   matchesByPage: Map<number, SearchMatch[]>;
+  highlightsByPage: Map<number, BookmarkItem[]>;
+  focusedHighlightId: string | null;
+  isAreaHighlightMode: boolean;
+  onToggleAreaHighlightMode: () => void;
+  activeHighlightColor: HighlightColor;
+  onSelectHighlightColor: (color: HighlightColor) => void;
+  canUndoHighlight: boolean;
+  lastHighlightLabel?: string;
+  onUndoLastHighlight: () => void;
+  onAddHighlightBookmark: (input: AddHighlightBookmarkInput) => void;
+  onUpdateHighlightColor: (id: string, color: HighlightColor) => void;
+  onUpdateHighlightLabel: (id: string, label: string) => void;
+  onRemoveHighlight: (id: string) => void;
   resolvedTheme: "light" | "dark" | "sepia";
+}
+
+interface PendingTextSelection {
+  pageNumber: number;
+  text: string;
+  rects: NormalizedRect[];
+  popupX: number;
+  popupY: number;
 }
 
 /**
@@ -77,6 +109,66 @@ function getTouchDistance(t1: React.Touch, t2: React.Touch): number {
   const dx = t1.clientX - t2.clientX;
   const dy = t1.clientY - t2.clientY;
   return Math.hypot(dx, dy);
+}
+
+/**
+ * Unisce i rettangoli di selezione adiacenti sulla stessa riga per creare un'evidenziazione pulita
+ */
+function mergeSelectionRects(
+  domRects: DOMRect[],
+  pageRect: DOMRect
+): NormalizedRect[] {
+  if (pageRect.width <= 0 || pageRect.height <= 0) return [];
+
+  const raw: NormalizedRect[] = [];
+  for (const r of domRects) {
+    if (r.width < 2 || r.height < 2) continue;
+    const x = Math.max(
+      0,
+      Math.min(100, ((r.left - pageRect.left) / pageRect.width) * 100)
+    );
+    const y = Math.max(
+      0,
+      Math.min(100, ((r.top - pageRect.top) / pageRect.height) * 100)
+    );
+    const width = Math.max(
+      0.5,
+      Math.min(100 - x, (r.width / pageRect.width) * 100)
+    );
+    const height = Math.max(
+      0.5,
+      Math.min(100 - y, (r.height / pageRect.height) * 100)
+    );
+    raw.push({ x, y, width, height });
+  }
+
+  if (raw.length <= 1) return raw;
+
+  // Raggruppa rettangoli sulla stessa linea verticale (tolleranza 0.8%)
+  const merged: NormalizedRect[] = [];
+  for (const rect of raw) {
+    const prev = merged[merged.length - 1];
+    if (
+      prev &&
+      Math.abs(prev.y - rect.y) < 0.85 &&
+      Math.abs(prev.height - rect.height) < 1.0 &&
+      rect.x <= prev.x + prev.width + 1.5
+    ) {
+      const rightEdge = Math.max(prev.x + prev.width, rect.x + rect.width);
+      prev.x = Math.min(prev.x, rect.x);
+      prev.width = Number((rightEdge - prev.x).toFixed(2));
+      prev.height = Number(Math.max(prev.height, rect.height).toFixed(2));
+    } else {
+      merged.push({
+        x: Number(rect.x.toFixed(2)),
+        y: Number(rect.y.toFixed(2)),
+        width: Number(rect.width.toFixed(2)),
+        height: Number(rect.height.toFixed(2)),
+      });
+    }
+  }
+
+  return merged;
 }
 
 /**
@@ -114,6 +206,19 @@ export default function PdfViewer({
   caseSensitive,
   activeMatch,
   matchesByPage,
+  highlightsByPage,
+  focusedHighlightId,
+  isAreaHighlightMode,
+  onToggleAreaHighlightMode,
+  activeHighlightColor,
+  onSelectHighlightColor,
+  canUndoHighlight,
+  lastHighlightLabel,
+  onUndoLastHighlight,
+  onAddHighlightBookmark,
+  onUpdateHighlightColor,
+  onUpdateHighlightLabel,
+  onRemoveHighlight,
   resolvedTheme,
 }: PdfViewerProps) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -132,6 +237,8 @@ export default function PdfViewer({
   const [pinchPreviewRatio, setPinchPreviewRatio] = useState<number>(1);
   const [loadProgress, setLoadProgress] = useState<number>(0);
   const [isDocumentLoaded, setIsDocumentLoaded] = useState<boolean>(false);
+  const [pendingSelection, setPendingSelection] =
+    useState<PendingTextSelection | null>(null);
 
   // Dimensioni in pixel di ogni singola pagina scalata
   const scaledWidth = Math.round(pageIntrinsicWidth * effectiveScale);
@@ -225,8 +332,108 @@ export default function PdfViewer({
     return () => registerScrollHandler(null);
   }, [registerScrollHandler, viewMode]);
 
+  // Rileva la selezione di testo effettuata dall'utente sul PDF per mostrare il menu coi 4 colori fluo
+  const checkTextSelection = useCallback(() => {
+    if (isAreaHighlightMode || typeof window === "undefined") return;
+
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+      setPendingSelection(null);
+      return;
+    }
+
+    const selectedText = sel.toString().replace(/\s+/g, " ").trim();
+    if (selectedText.length < 2) {
+      setPendingSelection(null);
+      return;
+    }
+
+    const range = sel.getRangeAt(0);
+    const anchorEl =
+      range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+        ? (range.commonAncestorContainer as HTMLElement)
+        : range.commonAncestorContainer.parentElement;
+
+    if (!anchorEl) {
+      setPendingSelection(null);
+      return;
+    }
+
+    const pageWrapper = anchorEl.closest<HTMLElement>("[data-page-number]");
+    if (!pageWrapper) {
+      setPendingSelection(null);
+      return;
+    }
+
+    const pageNumber = parseInt(
+      pageWrapper.getAttribute("data-page-number") ?? "0",
+      10
+    );
+    if (!pageNumber || Number.isNaN(pageNumber)) {
+      setPendingSelection(null);
+      return;
+    }
+
+    const pageRect = pageWrapper.getBoundingClientRect();
+    const clientRects = Array.from(range.getClientRects());
+    const mergedRects = mergeSelectionRects(clientRects, pageRect);
+
+    if (mergedRects.length === 0) {
+      setPendingSelection(null);
+      return;
+    }
+
+    const boundingRect = range.getBoundingClientRect();
+    const popupX = Math.max(
+      140,
+      Math.min(
+        window.innerWidth - 140,
+        boundingRect.left + boundingRect.width / 2
+      )
+    );
+    const popupY = Math.max(70, boundingRect.top - 10);
+
+    setPendingSelection({
+      pageNumber,
+      text: selectedText,
+      rects: mergedRects,
+      popupX,
+      popupY,
+    });
+  }, [isAreaHighlightMode]);
+
+  const handleConfirmTextHighlight = useCallback(
+    (color: HighlightColor) => {
+      if (!pendingSelection) return;
+      onAddHighlightBookmark({
+        pageNumber: pendingSelection.pageNumber,
+        type: "text",
+        color,
+        rects: pendingSelection.rects,
+        highlightedText: pendingSelection.text,
+      });
+      onSelectHighlightColor(color);
+      setPendingSelection(null);
+      window.getSelection()?.removeAllRanges();
+    },
+    [pendingSelection, onAddHighlightBookmark, onSelectHighlightColor]
+  );
+
+  const handleCreateAreaHighlight = useCallback(
+    (pageNumber: number, rect: NormalizedRect, color: HighlightColor) => {
+      onAddHighlightBookmark({
+        pageNumber,
+        type: "area",
+        color,
+        rects: [rect],
+      });
+    },
+    [onAddHighlightBookmark]
+  );
+
   // Calcola la pagina attiva durante lo scroll continuo
   const handleScroll = useCallback(() => {
+    setPendingSelection(null);
     if (viewMode !== "continuous") return;
     if (rafScrollRef.current !== null) return;
 
@@ -267,8 +474,8 @@ export default function PdfViewer({
   // GESTURE TOUCH: Pinch-to-Zoom a 2 dita + Doppio Tap + Swipe
   // =========================================================================
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (isAreaHighlightMode) return;
     if (e.touches.length === 2) {
-      // Inizio Pinch-to-Zoom a due dita
       isPinchingRef.current = true;
       pinchInitialDistanceRef.current = getTouchDistance(
         e.touches[0],
@@ -288,6 +495,7 @@ export default function PdfViewer({
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (isAreaHighlightMode) return;
     if (
       e.touches.length === 2 &&
       isPinchingRef.current &&
@@ -303,7 +511,12 @@ export default function PdfViewer({
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    // Se eravamo in Pinch-to-Zoom e le dita vengono rilasciate, applica il nuovo livello di zoom nitido sul PDF
+    if (isAreaHighlightMode) return;
+
+    setTimeout(() => {
+      checkTextSelection();
+    }, 60);
+
     if (isPinchingRef.current) {
       if (e.touches.length < 2) {
         const finalScale = Math.max(
@@ -336,7 +549,7 @@ export default function PdfViewer({
     touchStartXRef.current = null;
     touchStartYRef.current = null;
 
-    // 1. Verifica Doppio Tap (due tocchi rapidi nello stesso punto per ingrandire/ripristinare)
+    // 1. Verifica Doppio Tap
     const now = Date.now();
     if (Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15) {
       const prevTap = lastTapPosRef.current;
@@ -354,7 +567,7 @@ export default function PdfViewer({
       lastTapPosRef.current = { x: endX, y: endY };
     }
 
-    // 2. Swipe orizzontale per sfogliare pagina (solo in modalità Singola o Libro e se non si sta facendo Pan orizzontale)
+    // 2. Swipe orizzontale per sfogliare pagina
     if (viewMode !== "continuous") {
       const container = scrollContainerRef.current;
       const isHorizontallyScrollable =
@@ -451,17 +664,24 @@ export default function PdfViewer({
 
   const viewerBg =
     resolvedTheme === "dark"
-      ? "bg-zinc-950"
+      ? "bg-[#110d0b]"
       : resolvedTheme === "sepia"
-      ? "bg-[#e9dec6]"
-      : "bg-stone-100/90";
+      ? "bg-[#e3d2b0]"
+      : "bg-[#f3ecde]";
 
   const pageCardBg =
     resolvedTheme === "dark"
-      ? "bg-zinc-900 shadow-black/60 ring-1 ring-zinc-800"
+      ? "bg-[#1b1512] shadow-black/70 ring-1 ring-[#785926]/65"
       : resolvedTheme === "sepia"
-      ? "bg-[#fbf5e6] shadow-stone-900/15 ring-1 ring-[#d8c7a4]"
-      : "bg-white shadow-stone-900/10 ring-1 ring-stone-200/80";
+      ? "bg-[#fbf4e4] shadow-[#3a200a]/20 ring-1 ring-[#b88938]/75"
+      : "bg-[#fffdf9] shadow-[#3e220e]/12 ring-1 ring-[#c8a050]/70";
+
+  const floatingSurface =
+    resolvedTheme === "dark"
+      ? "bg-[#1b1512]/95 text-[#ede2d0] dnd-frame-dark"
+      : resolvedTheme === "sepia"
+      ? "bg-[#f2e4c6]/95 text-[#2a180d] dnd-frame-sepia"
+      : "bg-[#fbf6eb]/95 text-[#24160e] dnd-frame-light";
 
   const lastSpreadPage =
     spreadPages.length > 0
@@ -478,23 +698,209 @@ export default function PdfViewer({
   );
 
   return (
-    <div
-      ref={scrollContainerRef}
-      onScroll={handleScroll}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      className={`relative flex-1 h-full overflow-auto transition-colors duration-200 pb-20 md:pb-10 touch-pan-x touch-pan-y ${viewerBg}`}
-    >
+    <div className="relative flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+      {/* MENU FLOTTANTE AUTOMATICO QUANDO L'UTENTE SELEZIONA DEL TESTO SUL PDF */}
+      {pendingSelection && (
+        <div
+          style={{
+            left: `${pendingSelection.popupX}px`,
+            top: `${pendingSelection.popupY}px`,
+            transform: "translate(-50%, -100%)",
+          }}
+          onMouseDown={(e) => e.preventDefault()}
+          className={`fixed z-50 flex items-center gap-2 px-3 py-2 rounded-2xl border shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 ${floatingSurface}`}
+        >
+          <Highlighter className="w-3.5 h-3.5 text-[#8c1d14] dark:text-[#d4a74a] shrink-0" />
+          <span className="text-[11px] font-semibold mr-0.5">Evidenzia:</span>
+          <div className="flex items-center gap-1.5">
+            {HIGHLIGHT_COLORS.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => handleConfirmTextHighlight(c.id)}
+                title={`Evidenzia e salva nei segnalibri (${c.label})`}
+                aria-label={`Evidenzia in ${c.label}`}
+                className={`w-5 h-5 rounded-full transition-transform hover:scale-125 active:scale-95 ring-1 ${c.swatchClass}`}
+              />
+            ))}
+          </div>
+
+          {canUndoHighlight && (
+            <>
+              <div className="h-3.5 w-px bg-current opacity-20 mx-0.5" />
+              <button
+                type="button"
+                onClick={onUndoLastHighlight}
+                title={`Annulla ultima evidenziazione${
+                  lastHighlightLabel ? `: "${lastHighlightLabel}"` : ""
+                } (Ctrl+Z)`}
+                aria-label="Annulla ultima evidenziazione"
+                className="px-1.5 py-0.5 rounded-lg text-[11px] font-semibold flex items-center gap-1 text-[#8c1d14] dark:text-[#e5be67] hover:bg-[#8c1d14]/15 dark:hover:bg-[#d4a74a]/15 transition"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+                <span>Indietro</span>
+              </button>
+            </>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setPendingSelection(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+            aria-label="Chiudi menu selezione"
+            className="p-0.5 rounded opacity-50 hover:opacity-100 ml-0.5"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* BANNER ATTIVO QUANDO È IN USO LO STRUMENTO EVIDENZIATORE AD AREA */}
+      {isAreaHighlightMode && (
+        <div
+          className={`absolute top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 sm:gap-2.5 px-3.5 py-2 rounded-2xl border shadow-2xl backdrop-blur-md text-xs select-none ${floatingSurface}`}
+        >
+          <Highlighter className="w-4 h-4 text-[#8c1d14] dark:text-[#d4a74a] shrink-0" />
+          <span className="hidden sm:inline font-medium">
+            Traccia un riquadro sulla pagina per evidenziarlo:
+          </span>
+          <span className="sm:hidden font-medium">Riquadra:</span>
+          <div className="flex items-center gap-1.5 px-1.5 py-1 rounded-lg bg-black/5 dark:bg-white/10 border border-[#c59b27]/30">
+            {HIGHLIGHT_COLORS.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => onSelectHighlightColor(c.id)}
+                title={c.label}
+                className={`w-4 h-4 rounded-full transition-transform ${
+                  c.swatchClass
+                } ${
+                  activeHighlightColor === c.id
+                    ? "scale-125 ring-2"
+                    : "opacity-65 hover:opacity-100"
+                }`}
+              />
+            ))}
+          </div>
+
+          {/* Tasto Back / Indietro direttamente nel banner dell'evidenziatore */}
+          <button
+            type="button"
+            onClick={onUndoLastHighlight}
+            disabled={!canUndoHighlight}
+            title={
+              canUndoHighlight
+                ? `Annulla ultima evidenziazione${
+                    lastHighlightLabel ? `: "${lastHighlightLabel}"` : ""
+                  } (Ctrl+Z)`
+                : "Nessuna evidenziazione da annullare"
+            }
+            aria-label="Annulla ultima evidenziazione"
+            className={`px-2 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 border transition ${
+              canUndoHighlight
+                ? "border-[#8c1d14]/45 dark:border-[#d4a74a]/50 text-[#8c1d14] dark:text-[#e5be67] bg-[#8c1d14]/10 dark:bg-[#d4a74a]/15 hover:bg-[#8c1d14]/20 active:scale-95"
+                : "border-current/15 opacity-35 pointer-events-none"
+            }`}
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+            <span>Indietro</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onToggleAreaHighlightMode}
+            className="px-2.5 py-1 rounded-lg bg-[#8c1d14] text-[#fdf6e6] border border-[#d4a74a]/80 hover:opacity-95 text-[11px] font-semibold"
+          >
+            Fine
+          </button>
+        </div>
+      )}
+
       {/* Indicatore live durante il Pinch-to-Zoom a 2 dita */}
       {pinchPreviewRatio !== 1 && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-3.5 py-1.5 rounded-full bg-stone-900/90 text-white font-mono text-xs font-bold shadow-xl backdrop-blur-md pointer-events-none">
+        <div
+          className={`absolute top-6 left-1/2 -translate-x-1/2 z-50 px-3.5 py-1.5 rounded-full border font-mono text-xs font-bold shadow-xl backdrop-blur-md pointer-events-none ${floatingSurface}`}
+        >
           Zoom {livePinchPercentage}%
         </div>
       )}
 
-      {/* CONTROLLI ZOOM FLOTTANTI SEMPRE ACCESSIBILI (Ideali senza mouse o su touch/trackpad) */}
-      <div className="fixed bottom-20 md:bottom-5 right-4 z-30 flex items-center gap-1 p-1.5 rounded-2xl border shadow-xl backdrop-blur-xl bg-white/90 dark:bg-zinc-900/90 border-stone-200/90 dark:border-zinc-800 text-stone-900 dark:text-zinc-100 select-none">
+      {/* PULSANTI LATERALI PRECEDENTE / SUCCESSIVO (Ancorati ai bordi dell'area di lettura in vista Singola e Libro) */}
+      {viewMode !== "continuous" && (
+        <>
+          <button
+            type="button"
+            onClick={onPrevPage}
+            disabled={currentPage <= 1}
+            aria-label="Pagina precedente"
+            title="Pagina precedente (Freccia Sinistra)"
+            className={`hidden md:flex absolute left-4 lg:left-5 top-1/2 -translate-y-1/2 z-20 p-3.5 rounded-full border shadow-xl backdrop-blur-md hover:scale-105 active:scale-95 disabled:opacity-20 disabled:pointer-events-none transition ${floatingSurface}`}
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+
+          <button
+            type="button"
+            onClick={onNextPage}
+            disabled={
+              viewMode === "book"
+                ? lastSpreadPage >= numPages
+                : currentPage >= numPages
+            }
+            aria-label="Pagina successiva"
+            title="Pagina successiva (Freccia Destra)"
+            className={`hidden md:flex absolute right-4 lg:right-5 top-1/2 -translate-y-1/2 z-20 p-3.5 rounded-full border shadow-xl backdrop-blur-md hover:scale-105 active:scale-95 disabled:opacity-20 disabled:pointer-events-none transition ${floatingSurface}`}
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </>
+      )}
+
+      {/* CONTROLLI ZOOM & EVIDENZIATORE FLOTTANTI SEMPRE ACCESSIBILI */}
+      <div
+        className={`absolute bottom-20 md:bottom-5 right-4 z-30 flex items-center gap-1 p-1.5 rounded-2xl border shadow-xl backdrop-blur-xl select-none ${floatingSurface}`}
+      >
+        <button
+          type="button"
+          onClick={onToggleAreaHighlightMode}
+          title="Strumento Evidenziatore ad Area (Scorciatoia: H)"
+          aria-label="Evidenziatore ad Area"
+          className={`p-2 rounded-xl transition ${
+            isAreaHighlightMode
+              ? "bg-amber-400 text-stone-950 font-semibold shadow-xs"
+              : "hover:bg-black/5 dark:hover:bg-white/10 opacity-85 hover:opacity-100"
+          }`}
+        >
+          <Highlighter className="w-4 h-4" />
+        </button>
+
+        {(isAreaHighlightMode || canUndoHighlight) && (
+          <button
+            type="button"
+            onClick={onUndoLastHighlight}
+            disabled={!canUndoHighlight}
+            title={
+              canUndoHighlight
+                ? `Annulla ultima evidenziazione${
+                    lastHighlightLabel ? `: "${lastHighlightLabel}"` : ""
+                  } (Ctrl+Z)`
+                : "Nessuna evidenziazione da annullare"
+            }
+            aria-label="Annulla ultima evidenziazione"
+            className={`p-2 rounded-xl transition ${
+              canUndoHighlight
+                ? "text-[#8c1d14] dark:text-[#e5be67] hover:bg-[#8c1d14]/15 dark:hover:bg-[#d4a74a]/15 active:scale-95"
+                : "opacity-30 pointer-events-none"
+            }`}
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+        )}
+
+        <div className="h-4 w-px bg-current opacity-20 mx-0.5" />
+
         <button
           type="button"
           onClick={onToggleWheelZoomInContinuous}
@@ -505,8 +911,8 @@ export default function PdfViewer({
           }
           className={`hidden sm:flex items-center gap-1 px-2 py-1.5 rounded-xl text-[11px] font-medium transition ${
             wheelZoomInContinuous
-              ? "bg-amber-500 text-stone-950 font-semibold"
-              : "opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10"
+              ? "bg-[#8c1d14] text-[#fdf6e6] border border-[#d4a74a]/80 font-semibold"
+              : "opacity-75 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10"
           }`}
         >
           <Mouse className="w-3.5 h-3.5" />
@@ -546,6 +952,17 @@ export default function PdfViewer({
           <ZoomIn className="w-4 h-4" />
         </button>
       </div>
+
+      {/* CONTENITORE DI SCORRIMENTO PAGINE PDF */}
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        onMouseUp={checkTextSelection}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className={`relative flex-1 h-full overflow-auto dnd-scrollbar-main dnd-scrollbar-${resolvedTheme} transition-colors duration-200 pb-20 md:pb-10 touch-pan-x touch-pan-y ${viewerBg}`}
+      >
 
       <Document
         file={fileUrl}
@@ -623,12 +1040,15 @@ export default function PdfViewer({
                   isDocumentLoaded &&
                   Math.abs(pageNumber - currentPage) <= VIRTUAL_BUFFER_PAGES;
                 const pageMatches = matchesByPage.get(pageNumber);
+                const pageHighlights = highlightsByPage.get(pageNumber) ?? [];
 
                 return (
                   <div
                     key={pageNumber}
                     data-page-number={pageNumber}
-                    onDoubleClick={onDoubleTapZoom}
+                    onDoubleClick={
+                      !isAreaHighlightMode ? onDoubleTapZoom : undefined
+                    }
                     ref={(el) => {
                       if (el) {
                         pageRefs.current.set(pageNumber, el);
@@ -648,6 +1068,20 @@ export default function PdfViewer({
                       pageNumber={pageNumber}
                       matchesCount={pageMatches?.length ?? 0}
                       side="right"
+                    />
+
+                    {/* Layer Evidenziazioni Fluo (Testo & Area) */}
+                    <PageHighlightsLayer
+                      pageNumber={pageNumber}
+                      highlights={pageHighlights}
+                      focusedHighlightId={focusedHighlightId}
+                      isAreaHighlightMode={isAreaHighlightMode}
+                      activeHighlightColor={activeHighlightColor}
+                      onCreateAreaHighlight={handleCreateAreaHighlight}
+                      onUpdateHighlightColor={onUpdateHighlightColor}
+                      onUpdateHighlightLabel={onUpdateHighlightLabel}
+                      onRemoveHighlight={onRemoveHighlight}
+                      resolvedTheme={resolvedTheme}
                     />
 
                     {shouldRenderCanvas ? (
@@ -686,18 +1120,11 @@ export default function PdfViewer({
                2. MODALITÀ PAGINA SINGOLA
                ================================================================== */
             <div className="relative flex items-center justify-center my-auto">
-              <button
-                type="button"
-                onClick={onPrevPage}
-                disabled={currentPage <= 1}
-                aria-label="Pagina precedente"
-                className="hidden lg:flex fixed left-6 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-zinc-900/80 border border-stone-200 dark:border-zinc-800 shadow-lg backdrop-blur-md hover:scale-105 disabled:opacity-20 disabled:pointer-events-none transition"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-
               <div
-                onDoubleClick={onDoubleTapZoom}
+                data-page-number={currentPage}
+                onDoubleClick={
+                  !isAreaHighlightMode ? onDoubleTapZoom : undefined
+                }
                 ref={(el) => {
                   if (el) {
                     pageRefs.current.set(currentPage, el);
@@ -716,6 +1143,21 @@ export default function PdfViewer({
                   matchesCount={matchesByPage.get(currentPage)?.length ?? 0}
                   side="right"
                 />
+
+                {/* Layer Evidenziazioni Fluo (Testo & Area) */}
+                <PageHighlightsLayer
+                  pageNumber={currentPage}
+                  highlights={highlightsByPage.get(currentPage) ?? []}
+                  focusedHighlightId={focusedHighlightId}
+                  isAreaHighlightMode={isAreaHighlightMode}
+                  activeHighlightColor={activeHighlightColor}
+                  onCreateAreaHighlight={handleCreateAreaHighlight}
+                  onUpdateHighlightColor={onUpdateHighlightColor}
+                  onUpdateHighlightLabel={onUpdateHighlightLabel}
+                  onRemoveHighlight={onRemoveHighlight}
+                  resolvedTheme={resolvedTheme}
+                />
+
                 {isDocumentLoaded && (
                   <Page
                     key={`single-page-${currentPage}-${searchKeySuffix}`}
@@ -738,34 +1180,12 @@ export default function PdfViewer({
                   />
                 )}
               </div>
-
-              <button
-                type="button"
-                onClick={onNextPage}
-                disabled={currentPage >= numPages}
-                aria-label="Pagina successiva"
-                className="hidden lg:flex fixed right-6 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-white/80 dark:bg-zinc-900/80 border border-stone-200 dark:border-zinc-800 shadow-lg backdrop-blur-md hover:scale-105 disabled:opacity-20 disabled:pointer-events-none transition"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
             </div>
           ) : (
             /* ==================================================================
                3. MODALITÀ LIBRO SFOGLIABILE 3D (Doppia Facciata con Rilegatura)
                ================================================================== */
             <div className="relative flex flex-col items-center justify-center my-auto book-perspective-container">
-              {/* Pulsante Flottante Sinistro (Sfoglia Indietro) */}
-              <button
-                type="button"
-                onClick={onPrevPage}
-                disabled={currentPage <= 1}
-                aria-label="Sfoglia pagina precedente"
-                title="Sfoglia indietro (Freccia Sinistra)"
-                className="hidden md:flex fixed left-5 top-1/2 -translate-y-1/2 z-20 p-3.5 rounded-full bg-white/85 dark:bg-zinc-900/85 border border-stone-200 dark:border-zinc-800 shadow-xl backdrop-blur-md hover:scale-105 active:scale-95 disabled:opacity-20 disabled:pointer-events-none transition"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-
               {/* Contenitore 3D del Libro Aperto */}
               <div
                 key={
@@ -773,7 +1193,9 @@ export default function PdfViewer({
                     ? `book-turn-${turnAnimation.direction}-${turnAnimation.tick}`
                     : "book-static"
                 }
-                onDoubleClick={onDoubleTapZoom}
+                onDoubleClick={
+                  !isAreaHighlightMode ? onDoubleTapZoom : undefined
+                }
                 className={`relative flex items-center justify-center rounded-xl transition-shadow duration-300 book-spread-wrapper ${
                   turnAnimation?.direction === "next"
                     ? "animate-book-turn-next"
@@ -784,8 +1206,8 @@ export default function PdfViewer({
                 style={{
                   boxShadow:
                     resolvedTheme === "dark"
-                      ? "0 28px 60px -12px rgba(0,0,0,0.85), -4px 0 0 #27272a, -8px 0 0 #18181b, 4px 0 0 #27272a, 8px 0 0 #18181b"
-                      : "0 28px 60px -12px rgba(28,25,23,0.32), -4px 0 0 #e7e5e4, -7px 0 0 #d6d3d1, -10px 0 0 #a8a29e, 4px 0 0 #e7e5e4, 7px 0 0 #d6d3d1, 10px 0 0 #a8a29e",
+                      ? "0 28px 60px -12px rgba(0,0,0,0.85), -4px 0 0 #3d2c14, -8px 0 0 #1f160a, 4px 0 0 #3d2c14, 8px 0 0 #1f160a"
+                      : "0 28px 60px -12px rgba(42,24,13,0.34), -4px 0 0 #e6d7b8, -7px 0 0 #cfb88c, -10px 0 0 #8c1d14, 4px 0 0 #e6d7b8, 7px 0 0 #cfb88c, 10px 0 0 #8c1d14",
                 }}
               >
                 {spreadPages.map((pageNum, idx) => {
@@ -797,6 +1219,7 @@ export default function PdfViewer({
                   return (
                     <div
                       key={`book-page-${pageNum}`}
+                      data-page-number={pageNum}
                       ref={(el) => {
                         if (el) {
                           pageRefs.current.set(pageNum, el);
@@ -825,6 +1248,20 @@ export default function PdfViewer({
                         labelOverride={
                           isCover ? "Copertina • Pag. 1" : undefined
                         }
+                      />
+
+                      {/* Layer Evidenziazioni Fluo (Testo & Area) */}
+                      <PageHighlightsLayer
+                        pageNumber={pageNum}
+                        highlights={highlightsByPage.get(pageNum) ?? []}
+                        focusedHighlightId={focusedHighlightId}
+                        isAreaHighlightMode={isAreaHighlightMode}
+                        activeHighlightColor={activeHighlightColor}
+                        onCreateAreaHighlight={handleCreateAreaHighlight}
+                        onUpdateHighlightColor={onUpdateHighlightColor}
+                        onUpdateHighlightLabel={onUpdateHighlightLabel}
+                        onRemoveHighlight={onRemoveHighlight}
+                        resolvedTheme={resolvedTheme}
                       />
 
                       {/* Ombra realistica di curvatura verso la rilegatura centrale */}
@@ -942,22 +1379,11 @@ export default function PdfViewer({
                   Ctrl+Rotella o tasti Z / X (+ / -) per fare Zoom • Frecce ← / → per sfogliare
                 </span>
               </div>
-
-              {/* Pulsante Flottante Destro (Sfoglia Avanti) */}
-              <button
-                type="button"
-                onClick={onNextPage}
-                disabled={lastSpreadPage >= numPages}
-                aria-label="Sfoglia pagina successiva"
-                title="Sfoglia avanti (Freccia Destra)"
-                className="hidden md:flex fixed right-5 top-1/2 -translate-y-1/2 z-20 p-3.5 rounded-full bg-white/85 dark:bg-zinc-900/85 border border-stone-200 dark:border-zinc-800 shadow-xl backdrop-blur-md hover:scale-105 active:scale-95 disabled:opacity-20 disabled:pointer-events-none transition"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
             </div>
           )}
         </div>
       </Document>
+      </div>
     </div>
   );
 }
