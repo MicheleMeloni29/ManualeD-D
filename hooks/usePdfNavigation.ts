@@ -13,6 +13,18 @@ import type { OutlineItem, ViewMode, ZoomMode } from "@/types/pdf";
 const STORAGE_KEY_LAST_PAGE = "manuale_dnd_last_page_v1";
 const STORAGE_KEY_VIEW_MODE = "manuale_dnd_view_mode_v1";
 
+function getLastPageKey(accountId?: string): string {
+  return accountId
+    ? `${STORAGE_KEY_LAST_PAGE}_${accountId}`
+    : STORAGE_KEY_LAST_PAGE;
+}
+
+function getViewModeKey(accountId?: string): string {
+  return accountId
+    ? `${STORAGE_KEY_VIEW_MODE}_${accountId}`
+    : STORAGE_KEY_VIEW_MODE;
+}
+
 const emptySubscribe = () => () => {};
 
 export const DEFAULT_PDF_WIDTH = 747.895;
@@ -24,12 +36,13 @@ export const ZOOM_STEP = 0.15;
 export interface UsePdfNavigationOptions {
   initialTotalPages?: number;
   outline?: OutlineItem[];
+  accountId?: string;
 }
 
-function loadSavedPage(maxPages: number): number {
+function loadSavedPage(maxPages: number, accountId?: string): number {
   if (typeof window === "undefined") return 1;
   try {
-    const saved = localStorage.getItem(STORAGE_KEY_LAST_PAGE);
+    const saved = localStorage.getItem(getLastPageKey(accountId));
     if (saved) {
       const parsed = parseInt(saved, 10);
       if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= maxPages) {
@@ -42,10 +55,10 @@ function loadSavedPage(maxPages: number): number {
   return 1;
 }
 
-function loadSavedViewMode(): ViewMode {
+function loadSavedViewMode(accountId?: string): ViewMode {
   if (typeof window === "undefined") return "continuous";
   try {
-    const saved = localStorage.getItem(STORAGE_KEY_VIEW_MODE);
+    const saved = localStorage.getItem(getViewModeKey(accountId));
     if (
       saved === "continuous" ||
       saved === "single" ||
@@ -86,6 +99,7 @@ export function resolveChapterForPage(
 export function usePdfNavigation({
   initialTotalPages = 321,
   outline = [],
+  accountId,
 }: UsePdfNavigationOptions = {}) {
   const isHydrated = useSyncExternalStore(
     emptySubscribe,
@@ -93,14 +107,18 @@ export function usePdfNavigation({
     () => false
   );
 
+  const lastPageKey = useMemo(() => getLastPageKey(accountId), [accountId]);
+  const viewModeKey = useMemo(() => getViewModeKey(accountId), [accountId]);
+
   const [numPages, setNumPages] = useState<number>(initialTotalPages);
   const [currentPageState, setCurrentPage] = useState<number>(() =>
-    loadSavedPage(initialTotalPages)
+    loadSavedPage(initialTotalPages, accountId)
   );
-  const [viewModeState, setViewModeState] =
-    useState<ViewMode>(loadSavedViewMode);
+  const [viewModeState, setViewModeState] = useState<ViewMode>(() =>
+    loadSavedViewMode(accountId)
+  );
   const [zoomModeState, setZoomMode] = useState<ZoomMode>(() =>
-    loadSavedViewMode() === "book" ? "fit-page" : "fit-width"
+    loadSavedViewMode(accountId) === "book" ? "fit-page" : "fit-width"
   );
   const [customScale, setCustomScale] = useState<number>(1.0);
   // Permette di usare la rotella diretta per lo zoom anche in modalità "Continuo"
@@ -140,37 +158,89 @@ export function usePdfNavigation({
 
   // Al primo mount posiziona lo scroll del viewer sulla pagina salvata (senza chiamare setState nell'effect)
   useEffect(() => {
-    const initialPage = loadSavedPage(initialTotalPages);
+    const initialPage = loadSavedPage(initialTotalPages, accountId);
     if (initialPage > 1) {
       const timer = setTimeout(() => {
         scrollToPageHandlerRef.current?.(initialPage);
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [initialTotalPages]);
+  }, [initialTotalPages, accountId]);
 
   // Salva pagina corrente su localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_LAST_PAGE, String(currentPageState));
+      localStorage.setItem(lastPageKey, String(currentPageState));
     } catch {
       // Ignora errori
     }
-  }, [currentPageState]);
+  }, [currentPageState, lastPageKey]);
 
-  const setViewMode = useCallback((mode: ViewMode) => {
-    setViewModeState(mode);
-    if (mode === "book") {
-      setZoomMode("fit-page");
-    } else if (mode === "continuous") {
-      setZoomMode("fit-width");
-    }
-    try {
-      localStorage.setItem(STORAGE_KEY_VIEW_MODE, mode);
-    } catch {
-      // Ignora
-    }
-  }, []);
+  const setViewMode = useCallback(
+    (mode: ViewMode) => {
+      setViewModeState(mode);
+      if (mode === "book") {
+        setZoomMode("fit-page");
+      } else if (mode === "continuous") {
+        setZoomMode("fit-width");
+      }
+      try {
+        localStorage.setItem(viewModeKey, mode);
+      } catch {
+        // Ignora
+      }
+    },
+    [viewModeKey]
+  );
+
+  /**
+   * Idrata la pagina corrente e la modalità di visualizzazione dai salvataggi Cloud
+   */
+  const hydrateNavigationPreferences = useCallback(
+    (prefs: { lastPage?: number; viewMode?: ViewMode }) => {
+      if (
+        prefs.viewMode === "continuous" ||
+        prefs.viewMode === "single" ||
+        prefs.viewMode === "book"
+      ) {
+        setViewModeState(prefs.viewMode);
+        if (prefs.viewMode === "book") {
+          setZoomMode("fit-page");
+        } else if (prefs.viewMode === "continuous") {
+          setZoomMode("fit-width");
+        }
+        try {
+          localStorage.setItem(viewModeKey, prefs.viewMode);
+        } catch {
+          // Ignora
+        }
+      }
+
+      if (typeof prefs.lastPage === "number" && prefs.lastPage >= 1) {
+        const clamped = Math.max(
+          1,
+          Math.min(numPages, Math.floor(prefs.lastPage))
+        );
+        setCurrentPage(clamped);
+        try {
+          localStorage.setItem(lastPageKey, String(clamped));
+        } catch {
+          // Ignora
+        }
+        if (programmaticTimeoutRef.current) {
+          clearTimeout(programmaticTimeoutRef.current);
+        }
+        isProgrammaticScrollRef.current = true;
+        setTimeout(() => {
+          scrollToPageHandlerRef.current?.(clamped);
+        }, 120);
+        programmaticTimeoutRef.current = setTimeout(() => {
+          isProgrammaticScrollRef.current = false;
+        }, 550);
+      }
+    },
+    [numPages, lastPageKey, viewModeKey]
+  );
 
   // Determina se in modalità "Libro" c'è spazio per mostrare 2 pagine affiancate (Desktop/Tablet/Landscape)
   // oppure 1 singola pagina sfogliabile (Smartphone verticale)
@@ -377,6 +447,7 @@ export function usePdfNavigation({
     currentPage,
     viewMode,
     setViewMode,
+    hydrateNavigationPreferences,
     isTwoPageSpread,
     spreadPages,
     turnAnimation,

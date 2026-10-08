@@ -10,6 +10,8 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-dnd-display: var(--font-cinzel);
+  --font-dnd-serif: var(--font-garamond);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,6 +26,14 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   overflow: hidden;
+}
+
+.font-dnd-display {
+  font-family: var(--font-cinzel), Georgia, serif;
+}
+
+.font-dnd-serif {
+  font-family: var(--font-garamond), Georgia, serif;
 }
 
 /* ==========================================================================

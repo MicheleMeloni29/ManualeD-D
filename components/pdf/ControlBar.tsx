@@ -25,6 +25,13 @@ import {
   RotateCcw,
   X,
   Check,
+  Shield,
+  CloudCheck,
+  CloudOff,
+  RefreshCw,
+  LogOut,
+  UserCheck,
+  Crown,
 } from "lucide-react";
 import type {
   HighlightColor,
@@ -33,6 +40,11 @@ import type {
   ViewMode,
   ZoomMode,
 } from "@/types/pdf";
+import type {
+  AuthSession,
+  StorageBackendType,
+  SyncStatus,
+} from "@/types/account";
 
 export interface ControlBarProps {
   currentPage: number;
@@ -69,6 +81,15 @@ export interface ControlBarProps {
   themeMode: ThemeMode;
   resolvedTheme: "light" | "dark" | "sepia";
   onThemeChange: (mode: ThemeMode) => void;
+  isCharacterSheetOpen: boolean;
+  onToggleCharacterSheet: () => void;
+  characterName?: string;
+  session?: AuthSession | null;
+  syncStatus?: SyncStatus;
+  lastSavedAt?: number | null;
+  storageBackend?: StorageBackendType;
+  onSyncNow?: () => void;
+  onLogout?: () => void;
 }
 
 const THEME_OPTIONS = [
@@ -133,20 +154,32 @@ export function ControlBar({
   themeMode,
   resolvedTheme,
   onThemeChange,
+  isCharacterSheetOpen,
+  onToggleCharacterSheet,
+  characterName,
+  session,
+  syncStatus = "idle",
+  lastSavedAt,
+  storageBackend = "local-file",
+  onSyncNow,
+  onLogout,
 }: ControlBarProps) {
   const [editingPageInput, setEditingPageInput] = useState<string | null>(null);
   const [mobileZoomSheetOpen, setMobileZoomSheetOpen] =
     useState<boolean>(false);
   const [desktopThemeMenuOpen, setDesktopThemeMenuOpen] =
     useState<boolean>(false);
+  const [desktopAccountMenuOpen, setDesktopAccountMenuOpen] =
+    useState<boolean>(false);
 
   const desktopThemeRef = useRef<HTMLDivElement | null>(null);
+  const desktopAccountRef = useRef<HTMLDivElement | null>(null);
 
   const pageInput = editingPageInput ?? String(currentPage);
 
-  // Chiude il menu tema desktop cliccando fuori o premendo Escape
+  // Chiude i menu desktop cliccando fuori o premendo Escape
   useEffect(() => {
-    if (!desktopThemeMenuOpen) return;
+    if (!desktopThemeMenuOpen && !desktopAccountMenuOpen) return;
 
     const handlePointerDown = (e: MouseEvent) => {
       if (
@@ -155,11 +188,18 @@ export function ControlBar({
       ) {
         setDesktopThemeMenuOpen(false);
       }
+      if (
+        desktopAccountRef.current &&
+        !desktopAccountRef.current.contains(e.target as Node)
+      ) {
+        setDesktopAccountMenuOpen(false);
+      }
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setDesktopThemeMenuOpen(false);
+        setDesktopAccountMenuOpen(false);
       }
     };
 
@@ -169,7 +209,7 @@ export function ControlBar({
       document.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [desktopThemeMenuOpen]);
+  }, [desktopThemeMenuOpen, desktopAccountMenuOpen]);
 
   // Chiude il menu impostazioni mobile premendo Escape
   useEffect(() => {
@@ -521,11 +561,30 @@ export function ControlBar({
               )}
             </button>
 
+            {/* Pulsante Scheda Personaggio D&D 5e (Desktop >=1024px) */}
+            <button
+              type="button"
+              onClick={onToggleCharacterSheet}
+              aria-label="Apri o chiudi la Scheda Personaggio"
+              title="Scheda Personaggio D&D 5e (Tasto rapido: C)"
+              className={`hidden lg:flex px-2.5 py-2 rounded-lg transition-colors items-center gap-1.5 text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer ${
+                isCharacterSheetOpen ? activeDndBtn : subtleBg
+              }`}
+            >
+              <Shield className="w-4 h-4 shrink-0" />
+              <span className="max-w-[110px] truncate">
+                {characterName?.trim() || "Scheda PG"}
+              </span>
+            </button>
+
             {/* Selettore Tema Compatto con Popover su Desktop (>=1024px) */}
             <div ref={desktopThemeRef} className="relative hidden lg:block shrink-0">
               <button
                 type="button"
-                onClick={() => setDesktopThemeMenuOpen((v) => !v)}
+                onClick={() => {
+                  setDesktopAccountMenuOpen(false);
+                  setDesktopThemeMenuOpen((v) => !v);
+                }}
                 aria-label={`Tema di lettura: ${currentThemeOption.fullLabel}`}
                 title={`Tema di lettura (${currentThemeOption.fullLabel})`}
                 className={`px-2.5 py-2 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium whitespace-nowrap ${
@@ -574,6 +633,142 @@ export function ControlBar({
                 </div>
               )}
             </div>
+
+            {/* Menu Profilo Account & Sincronizzazione Cloud (Desktop >=1024px) */}
+            {session && (
+              <div
+                ref={desktopAccountRef}
+                className="relative hidden lg:block shrink-0"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDesktopThemeMenuOpen(false);
+                    setDesktopAccountMenuOpen((v) => !v);
+                  }}
+                  aria-label="Profilo Account e Salvataggio Cloud"
+                  title={`Account: ${session.characterName} (Master: ${session.masterName})`}
+                  className={`px-2.5 py-2 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium whitespace-nowrap cursor-pointer ${
+                    desktopAccountMenuOpen ? activeDndBtn : subtleBg
+                  }`}
+                >
+                  {syncStatus === "syncing" ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-500 shrink-0" />
+                  ) : syncStatus === "error" ? (
+                    <CloudOff className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                  ) : (
+                    <CloudCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  )}
+                  <span className="hidden xl:inline max-w-[96px] truncate font-semibold">
+                    {session.characterName}
+                  </span>
+                </button>
+
+                {desktopAccountMenuOpen && (
+                  <div
+                    className={`absolute right-0 top-full mt-2 w-68 rounded-2xl border p-3 shadow-2xl backdrop-blur-xl z-50 ${barSurface}`}
+                  >
+                    <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-[#c59b27]/30">
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-bold uppercase tracking-wider opacity-60 flex items-center gap-1">
+                          <UserCheck className="w-3 h-3" />
+                          <span>{session.slotLabel}</span>
+                        </div>
+                        <div className="text-sm font-bold truncate mt-0.5">
+                          {session.characterName}
+                        </div>
+                        <div className="text-[11px] opacity-75 flex items-center gap-1 mt-0.5">
+                          <Crown className="w-3 h-3 text-[#8c1d14] dark:text-[#d4a74a] shrink-0" />
+                          <span className="truncate">
+                            Master: <strong>{session.masterName}</strong>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Stato sincronizzazione */}
+                    <div className="py-2.5 border-b border-[#c59b27]/30 flex flex-col gap-1 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="opacity-70">Stato salvataggi:</span>
+                        <span className="font-semibold flex items-center gap-1">
+                          {syncStatus === "syncing" ? (
+                            <>
+                              <RefreshCw className="w-3 h-3 animate-spin text-amber-500" />
+                              <span>Salvataggio...</span>
+                            </>
+                          ) : syncStatus === "error" ? (
+                            <>
+                              <CloudOff className="w-3 h-3 text-red-500" />
+                              <span className="text-red-500">Errore rete</span>
+                            </>
+                          ) : (
+                            <>
+                              <CloudCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                              <span>Sincronizzato</span>
+                            </>
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-[11px] opacity-65">
+                        <span>Archivio:</span>
+                        <span>
+                          {storageBackend === "upstash-redis"
+                            ? "Cloud (Upstash Redis)"
+                            : "Server Locale (.data)"}
+                        </span>
+                      </div>
+                      {lastSavedAt && (
+                        <div className="flex items-center justify-between gap-2 text-[11px] opacity-65">
+                          <span>Ultimo salvataggio:</span>
+                          <span className="font-mono">
+                            {new Date(lastSavedAt).toLocaleTimeString("it-IT", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                            })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Azioni Account */}
+                    <div className="flex flex-col gap-1.5 pt-2.5">
+                      {onSyncNow && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSyncNow();
+                          }}
+                          disabled={syncStatus === "syncing"}
+                          className={`w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${subtleBg}`}
+                        >
+                          <RefreshCw
+                            className={`w-3.5 h-3.5 ${
+                              syncStatus === "syncing" ? "animate-spin" : ""
+                            }`}
+                          />
+                          <span>Sincronizza ora</span>
+                        </button>
+                      )}
+
+                      {onLogout && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDesktopAccountMenuOpen(false);
+                            onLogout();
+                          }}
+                          className="w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 text-red-700 dark:text-red-300 hover:bg-red-500/15 transition cursor-pointer"
+                        >
+                          <LogOut className="w-3.5 h-3.5" />
+                          <span>Cambia Account / Esci</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -769,6 +964,57 @@ export function ControlBar({
                   <span>Gestisci colori</span>
                 </button>
               </div>
+
+              {/* 5. Sezione Profilo Account & Cloud Sync (Mobile/Tablet) */}
+              {session && (
+                <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-[#c59b27]/30">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 text-xs font-bold truncate">
+                      {syncStatus === "syncing" ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-500 shrink-0" />
+                      ) : syncStatus === "error" ? (
+                        <CloudOff className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                      ) : (
+                        <CloudCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      )}
+                      <span className="truncate">{session.characterName}</span>
+                    </div>
+                    <div className="text-[10px] opacity-65 truncate">
+                      Master: {session.masterName}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {onSyncNow && (
+                      <button
+                        type="button"
+                        onClick={() => onSyncNow()}
+                        title="Sincronizza salvataggi"
+                        className={`p-2 rounded-xl transition ${subtleBg}`}
+                      >
+                        <RefreshCw
+                          className={`w-3.5 h-3.5 ${
+                            syncStatus === "syncing" ? "animate-spin" : ""
+                          }`}
+                        />
+                      </button>
+                    )}
+                    {onLogout && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileZoomSheetOpen(false);
+                          onLogout();
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold flex items-center gap-1 bg-red-500/15 text-red-700 dark:text-red-300 transition"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Esci</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </>
@@ -865,8 +1111,23 @@ export function ControlBar({
           </button>
         </div>
 
-        {/* Zona Destra: Impostazioni Vista/Zoom/Tema/Colori */}
-        <div className="flex items-center shrink-0">
+        {/* Zona Destra: Scheda PG + Impostazioni Vista/Zoom/Tema/Colori */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setMobileZoomSheetOpen(false);
+              onToggleCharacterSheet();
+            }}
+            aria-label="Apri o chiudi la Scheda Personaggio"
+            title="Scheda Personaggio D&D 5e"
+            className={`p-2 sm:p-2.5 rounded-xl flex items-center justify-center transition ${
+              isCharacterSheetOpen ? activeDndBtn : subtleBg
+            }`}
+          >
+            <Shield className="w-4 h-4 sm:w-5 sm:h-5" />
+          </button>
+
           <button
             type="button"
             onClick={() => setMobileZoomSheetOpen((v) => !v)}

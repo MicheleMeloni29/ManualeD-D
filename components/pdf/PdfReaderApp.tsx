@@ -27,10 +27,22 @@ import {
   type AddHighlightBookmarkInput,
 } from "@/hooks/useBookmarks";
 import { useThemeMode } from "@/hooks/useThemeMode";
+import { useCharacterSheet } from "@/hooks/useCharacterSheet";
+import {
+  useAccountAuth,
+  useAccountCloudSync,
+} from "@/hooks/useAccountAuth";
+import type {
+  AccountSaveData,
+  AuthSession,
+  StorageBackendType,
+} from "@/types/account";
+import { AccountLoginGate } from "@/components/auth/AccountLoginGate";
 import { ControlBar } from "./ControlBar";
 import { SidebarIndex } from "./SidebarIndex";
 import { SearchModal } from "./SearchModal";
 import { HighlightColorManagerModal } from "./HighlightColorManagerModal";
+import { CharacterSheetPanel } from "./CharacterSheetPanel";
 
 // Importazione dinamica client-only per evitare l'esecuzione SSR di PDF.js
 const PdfViewer = dynamic(() => import("./PdfViewer"), {
@@ -51,6 +63,68 @@ const METADATA_URL = "/pdf-metadata.json";
 const emptySubscribe = () => () => {};
 
 export function PdfReaderApp() {
+  const {
+    isHydrated,
+    session,
+    isLoggingIn,
+    loginError,
+    clearLoginError,
+    initialCloudData,
+    storageBackend,
+    setStorageBackend,
+    login,
+    logout,
+  } = useAccountAuth();
+
+  if (!isHydrated) {
+    return (
+      <div className="h-dvh w-full flex flex-col items-center justify-center gap-3 bg-[#110d0b] text-[#ede2d0]">
+        <Loader2 className="w-7 h-7 animate-spin text-[#d4a74a]" />
+        <p className="text-xs font-medium opacity-70">
+          Caricamento Grimorio D&amp;D 5e...
+        </p>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <AccountLoginGate
+        isLoggingIn={isLoggingIn}
+        loginError={loginError}
+        onClearError={clearLoginError}
+        onLogin={login}
+      />
+    );
+  }
+
+  return (
+    <AuthenticatedPdfReader
+      key={session.accountId}
+      session={session}
+      initialCloudData={initialCloudData}
+      storageBackend={storageBackend}
+      onBackendDetected={setStorageBackend}
+      onLogout={logout}
+    />
+  );
+}
+
+interface AuthenticatedPdfReaderProps {
+  session: AuthSession;
+  initialCloudData: AccountSaveData | null;
+  storageBackend: StorageBackendType;
+  onBackendDetected: (backend: StorageBackendType) => void;
+  onLogout: () => void;
+}
+
+function AuthenticatedPdfReader({
+  session,
+  initialCloudData,
+  storageBackend,
+  onBackendDetected,
+  onLogout,
+}: AuthenticatedPdfReaderProps) {
   const isHydrated = useSyncExternalStore(
     emptySubscribe,
     () => true,
@@ -68,8 +142,18 @@ export function PdfReaderApp() {
   const [activeHighlightColor, setActiveHighlightColor] =
     useState<HighlightColor>("yellow");
   const [isColorManagerOpen, setIsColorManagerOpen] = useState<boolean>(false);
+  const [isCharacterSheetOpen, setIsCharacterSheetOpen] =
+    useState<boolean>(false);
+  const [isCharacterSheetExpanded, setIsCharacterSheetExpanded] =
+    useState<boolean>(false);
 
-  const { themeMode, setThemeMode, resolvedTheme } = useThemeMode();
+  const { themeMode, setThemeMode, resolvedTheme } = useThemeMode(
+    session.accountId
+  );
+  const characterSheet = useCharacterSheet({
+    accountId: session.accountId,
+    defaultCharacterName: session.characterName,
+  });
 
   const {
     numPages,
@@ -77,6 +161,7 @@ export function PdfReaderApp() {
     currentPage,
     viewMode,
     setViewMode,
+    hydrateNavigationPreferences,
     isTwoPageSpread,
     spreadPages,
     turnAnimation,
@@ -104,6 +189,7 @@ export function PdfReaderApp() {
   } = usePdfNavigation({
     initialTotalPages: 321,
     outline,
+    accountId: session.accountId,
   });
 
   const {
@@ -136,6 +222,7 @@ export function PdfReaderApp() {
   const {
     bookmarks,
     highlightColors,
+    hydrateBookmarksData,
     addHighlightColor,
     updateHighlightColorMeta,
     removeHighlightColor,
@@ -152,7 +239,24 @@ export function PdfReaderApp() {
     lastHighlight,
     canUndoHighlight,
     undoLastHighlight,
-  } = useBookmarks();
+  } = useBookmarks(session.accountId);
+
+  const { syncStatus, lastSavedAt, syncNow } = useAccountCloudSync({
+    session,
+    initialCloudData,
+    onInvalidSession: onLogout,
+    onBackendDetected,
+    characterSheet: characterSheet.sheet,
+    hydrateSheet: characterSheet.hydrateSheet,
+    bookmarks,
+    highlightColors,
+    hydrateBookmarksData,
+    currentPage,
+    viewMode,
+    hydrateNavigationPreferences,
+    themeMode,
+    setThemeMode,
+  });
 
   // Carica l'indice dei capitoli e il testo pre-indicizzato delle 321 pagine
   useEffect(() => {
@@ -267,6 +371,9 @@ export function PdfReaderApp() {
       } else if (lowerKey === "i") {
         e.preventDefault();
         setIsSidebarOpen((prev) => !prev);
+      } else if (lowerKey === "c") {
+        e.preventDefault();
+        setIsCharacterSheetOpen((prev) => !prev);
       }
     };
 
@@ -315,6 +422,19 @@ export function PdfReaderApp() {
       }
     },
     [goToPage, focusHighlight]
+  );
+
+  const handleSearchFromCharacterSheet = useCallback(
+    (term: string) => {
+      setQuery(term);
+      openSearch();
+      setIsCharacterSheetExpanded(false);
+      // Su mobile chiude il pannello a tutto schermo per mostrare i risultati sul manuale
+      if (typeof window !== "undefined" && window.innerWidth < 1024) {
+        setIsCharacterSheetOpen(false);
+      }
+    },
+    [setQuery, openSearch]
   );
 
   const rootThemeClasses =
@@ -369,9 +489,20 @@ export function PdfReaderApp() {
         themeMode={themeMode}
         resolvedTheme={resolvedTheme}
         onThemeChange={setThemeMode}
+        isCharacterSheetOpen={isCharacterSheetOpen}
+        onToggleCharacterSheet={() =>
+          setIsCharacterSheetOpen((prev) => !prev)
+        }
+        characterName={characterSheet.sheet.characterName}
+        session={session}
+        syncStatus={syncStatus}
+        lastSavedAt={lastSavedAt}
+        storageBackend={storageBackend}
+        onSyncNow={syncNow}
+        onLogout={onLogout}
       />
 
-      {/* Area Centrale: Sidebar Indice + Visualizzatore PDF + Modale Ricerca */}
+      {/* Area Centrale: Sidebar Indice + Visualizzatore PDF + Scheda Personaggio + Modale Ricerca */}
       <div className="relative flex-1 flex min-h-0 overflow-hidden">
         <SidebarIndex
           isOpen={isSidebarOpen}
@@ -453,6 +584,19 @@ export function PdfReaderApp() {
             resolvedTheme={resolvedTheme}
           />
         </main>
+
+        <CharacterSheetPanel
+          isOpen={isCharacterSheetOpen}
+          isExpanded={isCharacterSheetExpanded}
+          onToggleExpand={() => setIsCharacterSheetExpanded((prev) => !prev)}
+          onClose={() => {
+            setIsCharacterSheetOpen(false);
+            setIsCharacterSheetExpanded(false);
+          }}
+          resolvedTheme={resolvedTheme}
+          onSearchInManual={handleSearchFromCharacterSheet}
+          {...characterSheet}
+        />
 
         <SearchModal
           isOpen={isSearchOpen}

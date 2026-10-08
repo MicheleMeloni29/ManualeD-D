@@ -22,10 +22,41 @@ import {
 const STORAGE_KEY_BOOKMARKS = "manuale_dnd_bookmarks_v1";
 const STORAGE_KEY_HIGHLIGHT_COLORS = "manuale_dnd_highlight_colors_v1";
 
-function loadInitialBookmarks(): BookmarkItem[] {
+function getBookmarksKey(accountId?: string): string {
+  return accountId
+    ? `${STORAGE_KEY_BOOKMARKS}_${accountId}`
+    : STORAGE_KEY_BOOKMARKS;
+}
+
+function getHighlightColorsKey(accountId?: string): string {
+  return accountId
+    ? `${STORAGE_KEY_HIGHLIGHT_COLORS}_${accountId}`
+    : STORAGE_KEY_HIGHLIGHT_COLORS;
+}
+
+function normalizeHighlightColors(
+  parsed: unknown
+): HighlightColorConfig[] {
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    return parsed.map((item: HighlightColorConfig) => {
+      const styles = buildColorStylesFromHex(item.hex || "#facc15");
+      return {
+        id: String(item.id),
+        label: String(item.label || "Evidenziatore"),
+        hex: styles.hex,
+        bgStyle: item.bgStyle || styles.bgStyle,
+        borderStyle: item.borderStyle || styles.borderStyle,
+        isCustom: Boolean(item.isCustom),
+      };
+    });
+  }
+  return DEFAULT_HIGHLIGHT_COLORS;
+}
+
+function loadInitialBookmarks(accountId?: string): BookmarkItem[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_BOOKMARKS);
+    const raw = localStorage.getItem(getBookmarksKey(accountId));
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
@@ -38,25 +69,15 @@ function loadInitialBookmarks(): BookmarkItem[] {
   return [];
 }
 
-function loadInitialHighlightColors(): HighlightColorConfig[] {
+function loadInitialHighlightColors(
+  accountId?: string
+): HighlightColorConfig[] {
   if (typeof window === "undefined") return DEFAULT_HIGHLIGHT_COLORS;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_HIGHLIGHT_COLORS);
+    const raw = localStorage.getItem(getHighlightColorsKey(accountId));
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((item: HighlightColorConfig) => {
-          const styles = buildColorStylesFromHex(item.hex || "#facc15");
-          return {
-            id: String(item.id),
-            label: String(item.label || "Evidenziatore"),
-            hex: styles.hex,
-            bgStyle: item.bgStyle || styles.bgStyle,
-            borderStyle: item.borderStyle || styles.borderStyle,
-            isCustom: Boolean(item.isCustom),
-          };
-        });
-      }
+      return normalizeHighlightColors(parsed);
     }
   } catch {
     // Ignora errori di parsing/storage
@@ -76,19 +97,26 @@ export interface AddHighlightBookmarkInput {
   chapterTitle?: string;
 }
 
-export function useBookmarks() {
+export function useBookmarks(accountId?: string) {
   const isHydrated = useSyncExternalStore(
     emptySubscribe,
     () => true,
     () => false
   );
 
-  const [bookmarksState, setBookmarksState] =
-    useState<BookmarkItem[]>(loadInitialBookmarks);
+  const bookmarksKey = useMemo(() => getBookmarksKey(accountId), [accountId]);
+  const colorsKey = useMemo(
+    () => getHighlightColorsKey(accountId),
+    [accountId]
+  );
+
+  const [bookmarksState, setBookmarksState] = useState<BookmarkItem[]>(() =>
+    loadInitialBookmarks(accountId)
+  );
 
   const [highlightColorsState, setHighlightColorsState] = useState<
     HighlightColorConfig[]
-  >(loadInitialHighlightColors);
+  >(() => loadInitialHighlightColors(accountId));
 
   // ID dell'evidenziazione temporaneamente messa in risalto (pulse) dopo un clic dalla sidebar
   const [focusedHighlightId, setFocusedHighlightId] = useState<string | null>(
@@ -122,23 +150,55 @@ export function useBookmarks() {
     return map;
   }, [bookmarks]);
 
-  const persistBookmarks = useCallback((next: BookmarkItem[]) => {
-    setBookmarksState(next);
-    try {
-      localStorage.setItem(STORAGE_KEY_BOOKMARKS, JSON.stringify(next));
-    } catch {
-      // Ignora errori di quota
-    }
-  }, []);
+  const persistBookmarks = useCallback(
+    (next: BookmarkItem[]) => {
+      setBookmarksState(next);
+      try {
+        localStorage.setItem(bookmarksKey, JSON.stringify(next));
+      } catch {
+        // Ignora errori di quota
+      }
+    },
+    [bookmarksKey]
+  );
 
-  const persistHighlightColors = useCallback((next: HighlightColorConfig[]) => {
-    setHighlightColorsState(next);
-    try {
-      localStorage.setItem(STORAGE_KEY_HIGHLIGHT_COLORS, JSON.stringify(next));
-    } catch {
-      // Ignora errori di quota
-    }
-  }, []);
+  const persistHighlightColors = useCallback(
+    (next: HighlightColorConfig[]) => {
+      setHighlightColorsState(next);
+      try {
+        localStorage.setItem(colorsKey, JSON.stringify(next));
+      } catch {
+        // Ignora errori di quota
+      }
+    },
+    [colorsKey]
+  );
+
+  /**
+   * Idrata segnalibri e colori evidenziatore con i dati caricati dal Cloud
+   */
+  const hydrateBookmarksData = useCallback(
+    (
+      cloudBookmarks: BookmarkItem[],
+      cloudColors: HighlightColorConfig[]
+    ) => {
+      const validBookmarks = Array.isArray(cloudBookmarks)
+        ? cloudBookmarks
+        : [];
+      const validColors = normalizeHighlightColors(cloudColors);
+      setBookmarksState(validBookmarks);
+      setHighlightColorsState(validColors);
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem(bookmarksKey, JSON.stringify(validBookmarks));
+          localStorage.setItem(colorsKey, JSON.stringify(validColors));
+        } catch {
+          // Ignora errori di quota
+        }
+      }
+    },
+    [bookmarksKey, colorsKey]
+  );
 
   // Crea un nuovo colore evidenziatore personalizzato con nome categoria e tinta scelta dall'utente
   const addHighlightColor = useCallback(
@@ -381,6 +441,7 @@ export function useBookmarks() {
   return {
     bookmarks,
     highlightColors,
+    hydrateBookmarksData,
     addHighlightColor,
     updateHighlightColorMeta,
     removeHighlightColor,
