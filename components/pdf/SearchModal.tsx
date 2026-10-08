@@ -106,7 +106,7 @@ export function SearchModal({
     <div
       role="dialog"
       aria-label="Ricerca nel documento PDF"
-      className={`fixed top-16 right-3 left-3 sm:left-auto sm:w-[390px] z-40 rounded-2xl border shadow-2xl backdrop-blur-xl flex flex-col max-h-[calc(100dvh-9rem)] md:max-h-[calc(100dvh-5.5rem)] transition-all duration-200 ${panelSurface}`}
+      className={`fixed top-16 right-3 left-3 sm:left-auto sm:w-[390px] z-40 rounded-2xl border shadow-2xl backdrop-blur-xl flex flex-col max-h-[calc(100dvh-9rem)] lg:max-h-[calc(100dvh-5.5rem)] transition-all duration-200 ${panelSurface}`}
     >
       {/* Barra Superiore di Input + Navigazione Occorrenze */}
       <div className="p-3 border-b border-[#c59b27]/35 space-y-2.5">

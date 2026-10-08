@@ -1,17 +1,19 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import { Trash2, Edit3, Check, X } from "lucide-react";
+import { Trash2, Edit3, Check, X, Plus } from "lucide-react";
 import type {
   BookmarkItem,
   HighlightColor,
+  HighlightColorConfig,
   NormalizedRect,
 } from "@/types/pdf";
-import { HIGHLIGHT_COLORS, getHighlightColorConfig } from "@/types/pdf";
+import { getHighlightColorConfig } from "@/types/pdf";
 
 export interface PageHighlightsLayerProps {
   pageNumber: number;
   highlights: BookmarkItem[];
+  highlightColors: HighlightColorConfig[];
   focusedHighlightId: string | null;
   isAreaHighlightMode: boolean;
   activeHighlightColor: HighlightColor;
@@ -23,12 +25,14 @@ export interface PageHighlightsLayerProps {
   onUpdateHighlightColor: (id: string, color: HighlightColor) => void;
   onUpdateHighlightLabel: (id: string, label: string) => void;
   onRemoveHighlight: (id: string) => void;
+  onOpenColorManager?: () => void;
   resolvedTheme: "light" | "dark" | "sepia";
 }
 
 export function PageHighlightsLayer({
   pageNumber,
   highlights,
+  highlightColors,
   focusedHighlightId,
   isAreaHighlightMode,
   activeHighlightColor,
@@ -36,6 +40,7 @@ export function PageHighlightsLayer({
   onUpdateHighlightColor,
   onUpdateHighlightLabel,
   onRemoveHighlight,
+  onOpenColorManager,
   resolvedTheme,
 }: PageHighlightsLayerProps) {
   const layerRef = useRef<HTMLDivElement | null>(null);
@@ -138,7 +143,10 @@ export function PageHighlightsLayer({
         }
       : null;
 
-  const activeColorConfig = getHighlightColorConfig(activeHighlightColor);
+  const activeColorConfig = getHighlightColorConfig(
+    activeHighlightColor,
+    highlightColors
+  );
 
   return (
     <div
@@ -161,7 +169,7 @@ export function PageHighlightsLayer({
       {/* Evidenziazioni salvate sulla pagina */}
       {highlights.map((hl) => {
         if (!hl.rects || hl.rects.length === 0) return null;
-        const cfg = getHighlightColorConfig(hl.color);
+        const cfg = getHighlightColorConfig(hl.color, highlightColors);
         const isFocused = focusedHighlightId === hl.id;
         const isSelected = selectedHighlightId === hl.id;
         const firstRect = hl.rects[0];
@@ -177,7 +185,7 @@ export function PageHighlightsLayer({
                   setNoteInput(hl.label);
                   setIsEditingNote(false);
                 }}
-                title={`${hl.label} — Clicca per modificare colore o eliminare`}
+                title={`[${cfg.label}] ${hl.label} — Clicca per modificare categoria, nota o eliminare`}
                 style={{
                   left: `${r.x}%`,
                   top: `${r.y}%`,
@@ -208,7 +216,7 @@ export function PageHighlightsLayer({
                   top: `${Math.max(2, firstRect.y - 1)}%`,
                   transform: "translateY(-100%)",
                 }}
-                className={`absolute z-30 pointer-events-auto rounded-xl border shadow-2xl backdrop-blur-md p-2 min-w-[210px] max-w-[260px] ${
+                className={`absolute z-30 pointer-events-auto rounded-xl border shadow-2xl backdrop-blur-md p-2 min-w-[220px] max-w-[280px] ${
                   resolvedTheme === "dark"
                     ? "bg-[#1b1512]/95 text-[#ede2d0] dnd-frame-dark"
                     : resolvedTheme === "sepia"
@@ -243,39 +251,69 @@ export function PageHighlightsLayer({
                 ) : (
                   <div className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-semibold truncate">
-                        {hl.label}
-                      </span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span
+                          style={{
+                            backgroundColor: cfg.bgStyle,
+                            borderColor: cfg.borderStyle,
+                          }}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border shrink-0"
+                        >
+                          <span
+                            style={{ backgroundColor: cfg.hex }}
+                            className="w-1.5 h-1.5 rounded-full"
+                          />
+                          {cfg.label}
+                        </span>
+                        <span className="text-[11px] font-semibold truncate">
+                          {hl.label}
+                        </span>
+                      </div>
                       <button
                         type="button"
                         onClick={() => setSelectedHighlightId(null)}
-                        className="p-0.5 rounded opacity-60 hover:opacity-100"
+                        className="p-0.5 rounded opacity-60 hover:opacity-100 shrink-0"
                       >
                         <X className="w-3 h-3" />
                       </button>
                     </div>
 
                     <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#c59b27]/35">
-                      {/* 4 colori fluo */}
-                      <div className="flex items-center gap-1.5">
-                        {HIGHLIGHT_COLORS.map((c) => (
+                      {/* Colori evidenziatore dinamici + pulsante "+" */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {highlightColors.map((c) => (
                           <button
                             key={c.id}
                             type="button"
                             onClick={() => onUpdateHighlightColor(hl.id, c.id)}
                             title={c.label}
-                            className={`w-4 h-4 rounded-full transition-transform ${
-                              c.swatchClass
-                            } ${
+                            style={{
+                              backgroundColor: c.hex,
+                              boxShadow:
+                                hl.color === c.id
+                                  ? `0 0 0 2px ${c.borderStyle}`
+                                  : undefined,
+                            }}
+                            className={`w-4 h-4 rounded-full border border-black/20 transition-transform ${
                               hl.color === c.id
-                                ? "scale-125 ring-2"
+                                ? "scale-125"
                                 : "opacity-65 hover:opacity-100"
                             }`}
                           />
                         ))}
+                        {onOpenColorManager && (
+                          <button
+                            type="button"
+                            onClick={onOpenColorManager}
+                            title="Aggiungi o rinomina colori evidenziatore"
+                            className="w-4 h-4 rounded-full border border-dashed border-current/45 flex items-center justify-center opacity-70 hover:opacity-100 hover:scale-110 transition"
+                          >
+                            <Plus className="w-2.5 h-2.5" />
+                          </button>
+                        )}
                       </div>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
                           type="button"
                           onClick={() => setIsEditingNote(true)}

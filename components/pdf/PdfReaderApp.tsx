@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useSyncExternalStore,
+} from "react";
 import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
 import type {
@@ -25,6 +30,7 @@ import { useThemeMode } from "@/hooks/useThemeMode";
 import { ControlBar } from "./ControlBar";
 import { SidebarIndex } from "./SidebarIndex";
 import { SearchModal } from "./SearchModal";
+import { HighlightColorManagerModal } from "./HighlightColorManagerModal";
 
 // Importazione dinamica client-only per evitare l'esecuzione SSR di PDF.js
 const PdfViewer = dynamic(() => import("./PdfViewer"), {
@@ -42,16 +48,26 @@ const PdfViewer = dynamic(() => import("./PdfViewer"), {
 const PDF_FILE_URL = "/Manuale%20del%20giocatore.pdf";
 const METADATA_URL = "/pdf-metadata.json";
 
+const emptySubscribe = () => () => {};
+
 export function PdfReaderApp() {
+  const isHydrated = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
+
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [pagesText, setPagesText] = useState<PageTextEntry[]>([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(
+  const [isSidebarOpenState, setIsSidebarOpen] = useState<boolean>(
     () => typeof window !== "undefined" && window.innerWidth >= 1280
   );
+  const isSidebarOpen = isHydrated ? isSidebarOpenState : false;
   const [isAreaHighlightMode, setIsAreaHighlightMode] =
     useState<boolean>(false);
   const [activeHighlightColor, setActiveHighlightColor] =
     useState<HighlightColor>("yellow");
+  const [isColorManagerOpen, setIsColorManagerOpen] = useState<boolean>(false);
 
   const { themeMode, setThemeMode, resolvedTheme } = useThemeMode();
 
@@ -119,6 +135,11 @@ export function PdfReaderApp() {
 
   const {
     bookmarks,
+    highlightColors,
+    addHighlightColor,
+    updateHighlightColorMeta,
+    removeHighlightColor,
+    resetHighlightColors,
     highlightsByPage,
     focusedHighlightId,
     focusHighlight,
@@ -334,8 +355,14 @@ export function PdfReaderApp() {
         onToggleBookmark={handleToggleCurrentBookmark}
         isAreaHighlightMode={isAreaHighlightMode}
         onToggleAreaHighlightMode={handleToggleAreaHighlightMode}
-        activeHighlightColor={activeHighlightColor}
+        highlightColors={highlightColors}
+        activeHighlightColor={
+          highlightColors.some((c) => c.id === activeHighlightColor)
+            ? activeHighlightColor
+            : highlightColors[0]?.id ?? "yellow"
+        }
         onSelectHighlightColor={setActiveHighlightColor}
+        onOpenColorManager={() => setIsColorManagerOpen(true)}
         canUndoHighlight={canUndoHighlight}
         lastHighlightLabel={lastHighlight?.label}
         onUndoLastHighlight={undoLastHighlight}
@@ -355,6 +382,8 @@ export function PdfReaderApp() {
           onSelectPage={goToPage}
           onSelectBookmark={handleSelectBookmark}
           bookmarks={bookmarks}
+          highlightColors={highlightColors}
+          onOpenColorManager={() => setIsColorManagerOpen(true)}
           isCurrentPageBookmarked={isPageBookmarked(currentPage)}
           onToggleCurrentPageBookmark={handleToggleCurrentBookmark}
           onRemoveBookmark={removeBookmark}
@@ -403,10 +432,16 @@ export function PdfReaderApp() {
             activeMatch={activeMatch}
             matchesByPage={matchesByPage}
             highlightsByPage={highlightsByPage}
+            highlightColors={highlightColors}
+            onOpenColorManager={() => setIsColorManagerOpen(true)}
             focusedHighlightId={focusedHighlightId}
             isAreaHighlightMode={isAreaHighlightMode}
             onToggleAreaHighlightMode={handleToggleAreaHighlightMode}
-            activeHighlightColor={activeHighlightColor}
+            activeHighlightColor={
+              highlightColors.some((c) => c.id === activeHighlightColor)
+                ? activeHighlightColor
+                : highlightColors[0]?.id ?? "yellow"
+            }
             onSelectHighlightColor={setActiveHighlightColor}
             canUndoHighlight={canUndoHighlight}
             lastHighlightLabel={lastHighlight?.label}
@@ -435,6 +470,23 @@ export function PdfReaderApp() {
           onNextMatch={nextMatch}
           onPrevMatch={prevMatch}
           onClearSearch={clearSearch}
+          resolvedTheme={resolvedTheme}
+        />
+
+        <HighlightColorManagerModal
+          isOpen={isColorManagerOpen}
+          onClose={() => setIsColorManagerOpen(false)}
+          highlightColors={highlightColors}
+          activeHighlightColor={
+            highlightColors.some((c) => c.id === activeHighlightColor)
+              ? activeHighlightColor
+              : highlightColors[0]?.id ?? "yellow"
+          }
+          onSelectHighlightColor={setActiveHighlightColor}
+          onAddHighlightColor={addHighlightColor}
+          onUpdateHighlightColorMeta={updateHighlightColorMeta}
+          onRemoveHighlightColor={removeHighlightColor}
+          onResetHighlightColors={resetHighlightColors}
           resolvedTheme={resolvedTheme}
         />
       </div>

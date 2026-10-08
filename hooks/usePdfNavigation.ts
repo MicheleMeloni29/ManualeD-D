@@ -1,10 +1,19 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
 import type { OutlineItem, ViewMode, ZoomMode } from "@/types/pdf";
 
 const STORAGE_KEY_LAST_PAGE = "manuale_dnd_last_page_v1";
 const STORAGE_KEY_VIEW_MODE = "manuale_dnd_view_mode_v1";
+
+const emptySubscribe = () => () => {};
 
 export const DEFAULT_PDF_WIDTH = 747.895;
 export const DEFAULT_PDF_HEIGHT = 1057.756;
@@ -78,16 +87,30 @@ export function usePdfNavigation({
   initialTotalPages = 321,
   outline = [],
 }: UsePdfNavigationOptions = {}) {
+  const isHydrated = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
+
   const [numPages, setNumPages] = useState<number>(initialTotalPages);
-  const [currentPage, setCurrentPage] = useState<number>(() =>
+  const [currentPageState, setCurrentPage] = useState<number>(() =>
     loadSavedPage(initialTotalPages)
   );
-  const [viewMode, setViewModeState] = useState<ViewMode>(loadSavedViewMode);
-  const [zoomMode, setZoomMode] = useState<ZoomMode>("fit-width");
+  const [viewModeState, setViewModeState] =
+    useState<ViewMode>(loadSavedViewMode);
+  const [zoomModeState, setZoomMode] = useState<ZoomMode>(() =>
+    loadSavedViewMode() === "book" ? "fit-page" : "fit-width"
+  );
   const [customScale, setCustomScale] = useState<number>(1.0);
   // Permette di usare la rotella diretta per lo zoom anche in modalità "Continuo"
   const [wheelZoomInContinuous, setWheelZoomInContinuous] =
     useState<boolean>(false);
+
+  // Allinea SSR e primo pass di idratazione client per evitare Hydration Mismatch
+  const currentPage = isHydrated ? currentPageState : 1;
+  const viewMode: ViewMode = isHydrated ? viewModeState : "continuous";
+  const zoomMode: ZoomMode = isHydrated ? zoomModeState : "fit-width";
 
   const [containerDimensions, setContainerDimensions] = useState<{
     width: number;
@@ -129,11 +152,11 @@ export function usePdfNavigation({
   // Salva pagina corrente su localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_LAST_PAGE, String(currentPage));
+      localStorage.setItem(STORAGE_KEY_LAST_PAGE, String(currentPageState));
     } catch {
       // Ignora errori
     }
-  }, [currentPage]);
+  }, [currentPageState]);
 
   const setViewMode = useCallback((mode: ViewMode) => {
     setViewModeState(mode);

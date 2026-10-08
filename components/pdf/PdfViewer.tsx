@@ -22,16 +22,17 @@ import {
   Mouse,
   Highlighter,
   Undo2,
+  Plus,
   X,
 } from "lucide-react";
 import type {
   BookmarkItem,
   HighlightColor,
+  HighlightColorConfig,
   NormalizedRect,
   SearchMatch,
   ViewMode,
 } from "@/types/pdf";
-import { HIGHLIGHT_COLORS } from "@/types/pdf";
 import { buildSearchRegex } from "@/hooks/usePdfSearch";
 import { MIN_ZOOM, MAX_ZOOM } from "@/hooks/usePdfNavigation";
 import type { AddHighlightBookmarkInput } from "@/hooks/useBookmarks";
@@ -70,6 +71,8 @@ export interface PdfViewerProps {
   activeMatch: SearchMatch | null;
   matchesByPage: Map<number, SearchMatch[]>;
   highlightsByPage: Map<number, BookmarkItem[]>;
+  highlightColors: HighlightColorConfig[];
+  onOpenColorManager: () => void;
   focusedHighlightId: string | null;
   isAreaHighlightMode: boolean;
   onToggleAreaHighlightMode: () => void;
@@ -207,6 +210,8 @@ export default function PdfViewer({
   activeMatch,
   matchesByPage,
   highlightsByPage,
+  highlightColors,
+  onOpenColorManager,
   focusedHighlightId,
   isAreaHighlightMode,
   onToggleAreaHighlightMode,
@@ -713,16 +718,29 @@ export default function PdfViewer({
           <Highlighter className="w-3.5 h-3.5 text-[#8c1d14] dark:text-[#d4a74a] shrink-0" />
           <span className="text-[11px] font-semibold mr-0.5">Evidenzia:</span>
           <div className="flex items-center gap-1.5">
-            {HIGHLIGHT_COLORS.map((c) => (
+            {highlightColors.map((c) => (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => handleConfirmTextHighlight(c.id)}
-                title={`Evidenzia e salva nei segnalibri (${c.label})`}
+                title={`Evidenzia come "${c.label}"`}
                 aria-label={`Evidenzia in ${c.label}`}
-                className={`w-5 h-5 rounded-full transition-transform hover:scale-125 active:scale-95 ring-1 ${c.swatchClass}`}
+                style={{
+                  backgroundColor: c.hex,
+                  boxShadow: `0 0 0 1.5px ${c.borderStyle}`,
+                }}
+                className="w-5 h-5 rounded-full border border-black/20 transition-transform hover:scale-125 active:scale-95"
               />
             ))}
+            <button
+              type="button"
+              onClick={onOpenColorManager}
+              title="Aggiungi nuovo colore o rinomina categorie"
+              aria-label="Gestisci colori evidenziatore"
+              className="w-5 h-5 rounded-full border border-dashed border-current/50 flex items-center justify-center opacity-75 hover:opacity-100 hover:scale-110 transition"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
           </div>
 
           {canUndoHighlight && (
@@ -760,29 +778,43 @@ export default function PdfViewer({
       {/* BANNER ATTIVO QUANDO È IN USO LO STRUMENTO EVIDENZIATORE AD AREA */}
       {isAreaHighlightMode && (
         <div
-          className={`absolute top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 sm:gap-2.5 px-3.5 py-2 rounded-2xl border shadow-2xl backdrop-blur-md text-xs select-none ${floatingSurface}`}
+          className={`absolute top-3 left-1/2 -translate-x-1/2 z-40 w-max max-w-[calc(100vw-1.5rem)] flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 px-3 sm:px-3.5 py-2 rounded-2xl border shadow-2xl backdrop-blur-md text-xs select-none ${floatingSurface}`}
         >
           <Highlighter className="w-4 h-4 text-[#8c1d14] dark:text-[#d4a74a] shrink-0" />
-          <span className="hidden sm:inline font-medium">
+          <span className="hidden md:inline font-medium">
             Traccia un riquadro sulla pagina per evidenziarlo:
           </span>
-          <span className="sm:hidden font-medium">Riquadra:</span>
+          <span className="md:hidden font-medium">Riquadra:</span>
           <div className="flex items-center gap-1.5 px-1.5 py-1 rounded-lg bg-black/5 dark:bg-white/10 border border-[#c59b27]/30">
-            {HIGHLIGHT_COLORS.map((c) => (
+            {highlightColors.map((c) => (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => onSelectHighlightColor(c.id)}
                 title={c.label}
-                className={`w-4 h-4 rounded-full transition-transform ${
-                  c.swatchClass
-                } ${
+                style={{
+                  backgroundColor: c.hex,
+                  boxShadow:
+                    activeHighlightColor === c.id
+                      ? `0 0 0 2px ${c.borderStyle}`
+                      : undefined,
+                }}
+                className={`w-4 h-4 rounded-full border border-black/20 transition-transform ${
                   activeHighlightColor === c.id
-                    ? "scale-125 ring-2"
+                    ? "scale-125"
                     : "opacity-65 hover:opacity-100"
                 }`}
               />
             ))}
+            <button
+              type="button"
+              onClick={onOpenColorManager}
+              title="Aggiungi nuovo colore o rinomina categorie"
+              aria-label="Gestisci colori evidenziatore"
+              className="w-4 h-4 rounded-full border border-dashed border-current/50 flex items-center justify-center opacity-75 hover:opacity-100 hover:scale-110 transition"
+            >
+              <Plus className="w-2.5 h-2.5" />
+            </button>
           </div>
 
           {/* Tasto Back / Indietro direttamente nel banner dell'evidenziatore */}
@@ -805,7 +837,7 @@ export default function PdfViewer({
             }`}
           >
             <Undo2 className="w-3.5 h-3.5" />
-            <span>Indietro</span>
+            <span className="hidden sm:inline">Indietro</span>
           </button>
 
           <button
@@ -858,9 +890,9 @@ export default function PdfViewer({
         </>
       )}
 
-      {/* CONTROLLI ZOOM & EVIDENZIATORE FLOTTANTI SEMPRE ACCESSIBILI */}
+      {/* CONTROLLI ZOOM & EVIDENZIATORE FLOTTANTI SU DESKTOP (>= 1024px) */}
       <div
-        className={`absolute bottom-20 md:bottom-5 right-4 z-30 flex items-center gap-1 p-1.5 rounded-2xl border shadow-xl backdrop-blur-xl select-none ${floatingSurface}`}
+        className={`hidden lg:flex absolute bottom-5 right-4 z-30 items-center gap-1 p-1.5 rounded-2xl border shadow-xl backdrop-blur-xl select-none ${floatingSurface}`}
       >
         <button
           type="button"
@@ -909,14 +941,14 @@ export default function PdfViewer({
               ? "Rotella mouse impostata su Zoom diretto (Clicca per tornare a Ctrl+Rotella)"
               : "Zoom con Ctrl+Rotella attivo (Clicca per fare Zoom con la sola rotella)"
           }
-          className={`hidden sm:flex items-center gap-1 px-2 py-1.5 rounded-xl text-[11px] font-medium transition ${
+          className={`flex items-center gap-1 px-2 py-1.5 rounded-xl text-[11px] font-medium transition ${
             wheelZoomInContinuous
               ? "bg-[#8c1d14] text-[#fdf6e6] border border-[#d4a74a]/80 font-semibold"
               : "opacity-75 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10"
           }`}
         >
           <Mouse className="w-3.5 h-3.5" />
-          <span className="hidden lg:inline">
+          <span>
             {wheelZoomInContinuous ? "Rotella: Zoom" : "Ctrl+Rotella"}
           </span>
         </button>
@@ -961,7 +993,7 @@ export default function PdfViewer({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className={`relative flex-1 h-full overflow-auto dnd-scrollbar-main dnd-scrollbar-${resolvedTheme} transition-colors duration-200 pb-20 md:pb-10 touch-pan-x touch-pan-y ${viewerBg}`}
+        className={`relative flex-1 h-full overflow-auto dnd-scrollbar-main dnd-scrollbar-${resolvedTheme} transition-colors duration-200 pb-24 lg:pb-10 touch-pan-x touch-pan-y ${viewerBg}`}
       >
 
       <Document
@@ -1070,10 +1102,11 @@ export default function PdfViewer({
                       side="right"
                     />
 
-                    {/* Layer Evidenziazioni Fluo (Testo & Area) */}
+                    {/* Layer Evidenziazioni Categorizzate (Testo & Area) */}
                     <PageHighlightsLayer
                       pageNumber={pageNumber}
                       highlights={pageHighlights}
+                      highlightColors={highlightColors}
                       focusedHighlightId={focusedHighlightId}
                       isAreaHighlightMode={isAreaHighlightMode}
                       activeHighlightColor={activeHighlightColor}
@@ -1081,6 +1114,7 @@ export default function PdfViewer({
                       onUpdateHighlightColor={onUpdateHighlightColor}
                       onUpdateHighlightLabel={onUpdateHighlightLabel}
                       onRemoveHighlight={onRemoveHighlight}
+                      onOpenColorManager={onOpenColorManager}
                       resolvedTheme={resolvedTheme}
                     />
 
@@ -1144,10 +1178,11 @@ export default function PdfViewer({
                   side="right"
                 />
 
-                {/* Layer Evidenziazioni Fluo (Testo & Area) */}
+                {/* Layer Evidenziazioni Categorizzate (Testo & Area) */}
                 <PageHighlightsLayer
                   pageNumber={currentPage}
                   highlights={highlightsByPage.get(currentPage) ?? []}
+                  highlightColors={highlightColors}
                   focusedHighlightId={focusedHighlightId}
                   isAreaHighlightMode={isAreaHighlightMode}
                   activeHighlightColor={activeHighlightColor}
@@ -1155,6 +1190,7 @@ export default function PdfViewer({
                   onUpdateHighlightColor={onUpdateHighlightColor}
                   onUpdateHighlightLabel={onUpdateHighlightLabel}
                   onRemoveHighlight={onRemoveHighlight}
+                  onOpenColorManager={onOpenColorManager}
                   resolvedTheme={resolvedTheme}
                 />
 
@@ -1250,10 +1286,11 @@ export default function PdfViewer({
                         }
                       />
 
-                      {/* Layer Evidenziazioni Fluo (Testo & Area) */}
+                      {/* Layer Evidenziazioni Categorizzate (Testo & Area) */}
                       <PageHighlightsLayer
                         pageNumber={pageNum}
                         highlights={highlightsByPage.get(pageNum) ?? []}
+                        highlightColors={highlightColors}
                         focusedHighlightId={focusedHighlightId}
                         isAreaHighlightMode={isAreaHighlightMode}
                         activeHighlightColor={activeHighlightColor}
@@ -1261,6 +1298,7 @@ export default function PdfViewer({
                         onUpdateHighlightColor={onUpdateHighlightColor}
                         onUpdateHighlightLabel={onUpdateHighlightLabel}
                         onRemoveHighlight={onRemoveHighlight}
+                        onOpenColorManager={onOpenColorManager}
                         resolvedTheme={resolvedTheme}
                       />
 

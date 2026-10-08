@@ -14,13 +14,15 @@ import {
   Check,
   Highlighter,
   Undo2,
+  Palette,
 } from "lucide-react";
 import type {
   BookmarkItem,
   HighlightColor,
+  HighlightColorConfig,
   OutlineItem,
 } from "@/types/pdf";
-import { HIGHLIGHT_COLORS, getHighlightColorConfig } from "@/types/pdf";
+import { getHighlightColorConfig } from "@/types/pdf";
 
 export interface SidebarIndexProps {
   isOpen: boolean;
@@ -31,6 +33,8 @@ export interface SidebarIndexProps {
   onSelectPage: (pageNumber: number) => void;
   onSelectBookmark: (bookmark: BookmarkItem) => void;
   bookmarks: BookmarkItem[];
+  highlightColors: HighlightColorConfig[];
+  onOpenColorManager: () => void;
   isCurrentPageBookmarked: boolean;
   onToggleCurrentPageBookmark: () => void;
   onRemoveBookmark: (id: string) => void;
@@ -53,6 +57,8 @@ export function SidebarIndex({
   onSelectPage,
   onSelectBookmark,
   bookmarks,
+  highlightColors,
+  onOpenColorManager,
   isCurrentPageBookmarked,
   onToggleCurrentPageBookmark,
   onRemoveBookmark,
@@ -125,14 +131,14 @@ export function SidebarIndex({
 
   const handlePageJump = (pageNumber: number) => {
     onSelectPage(pageNumber);
-    if (typeof window !== "undefined" && window.innerWidth < 768) {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
       onClose();
     }
   };
 
   const handleBookmarkClick = (bm: BookmarkItem) => {
     onSelectBookmark(bm);
-    if (typeof window !== "undefined" && window.innerWidth < 768) {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
       onClose();
     }
   };
@@ -163,17 +169,17 @@ export function SidebarIndex({
 
   return (
     <>
-      {/* Backdrop su Mobile */}
+      {/* Backdrop su Mobile e Tablet (< 1024px) */}
       <div
         onClick={onClose}
         aria-hidden="true"
-        className="md:hidden fixed inset-0 z-40 bg-black/55 backdrop-blur-xs animate-in fade-in"
+        className="lg:hidden fixed inset-0 z-40 bg-black/55 backdrop-blur-xs"
       />
 
-      {/* Drawer su Mobile / Sidebar laterale su Desktop */}
+      {/* Drawer su Mobile/Tablet (< 1024px) / Sidebar laterale su Desktop (>= 1024px) */}
       <aside
         aria-label="Indice del libro e segnalibri"
-        className={`fixed md:static inset-y-0 left-0 z-50 md:z-20 w-[85vw] max-w-[330px] md:w-80 shrink-0 border-r flex flex-col h-full transition-colors select-none ${panelBg}`}
+        className={`fixed lg:static inset-y-0 left-0 z-50 lg:z-20 w-[85vw] max-w-[330px] lg:w-80 shrink-0 border-r flex flex-col h-full transition-colors select-none ${panelBg}`}
       >
         {/* Header Sidebar con Tab Switcher */}
         <div className="p-3 border-b border-[#c59b27]/35 flex flex-col gap-2.5">
@@ -243,43 +249,20 @@ export function SidebarIndex({
             </div>
           )}
 
-          {/* Barra filtri per Colore Fluo nel tab Segnalibri */}
-          {activeTab === "bookmarks" && bookmarks.length > 0 && (
-            <div className="flex items-center justify-between gap-1 pt-0.5">
+          {/* Barra filtri per Categoria/Colore nel tab Segnalibri */}
+          {activeTab === "bookmarks" && (
+            <div className="flex flex-wrap items-center gap-1 pt-0.5">
               <button
                 type="button"
                 onClick={() => setColorFilter("all")}
                 className={`px-2 py-1 rounded-lg text-[11px] font-medium transition ${
                   colorFilter === "all"
                     ? activeDndTab
-                    : "opacity-70 hover:opacity-100 bg-black/5 dark:bg-white/5 border border-[#c59b27]/25"
+                    : "opacity-75 hover:opacity-100 bg-black/5 dark:bg-white/5 border border-[#c59b27]/25"
                 }`}
               >
                 Tutti
               </button>
-
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-black/5 dark:bg-white/5 border border-[#c59b27]/25">
-                {HIGHLIGHT_COLORS.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() =>
-                      setColorFilter((prev) =>
-                        prev === c.id ? "all" : c.id
-                      )
-                    }
-                    title={`Filtra per ${c.label}`}
-                    aria-label={`Filtra per ${c.label}`}
-                    className={`w-4 h-4 rounded-full transition-transform ${
-                      c.swatchClass
-                    } ${
-                      colorFilter === c.id
-                        ? "scale-125 ring-2"
-                        : "opacity-70 hover:opacity-100"
-                    }`}
-                  />
-                ))}
-              </div>
 
               <button
                 type="button"
@@ -291,10 +274,56 @@ export function SidebarIndex({
                 className={`px-2 py-1 rounded-lg text-[11px] font-medium transition ${
                   colorFilter === "page"
                     ? activeDndTab
-                    : "opacity-70 hover:opacity-100 bg-black/5 dark:bg-white/5 border border-[#c59b27]/25"
+                    : "opacity-75 hover:opacity-100 bg-black/5 dark:bg-white/5 border border-[#c59b27]/25"
                 }`}
               >
                 Pagine
+              </button>
+
+              {highlightColors.map((c) => {
+                const isSelected = colorFilter === c.id;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() =>
+                      setColorFilter((prev) =>
+                        prev === c.id ? "all" : c.id
+                      )
+                    }
+                    title={`Filtra per ${c.label}`}
+                    aria-label={`Filtra per ${c.label}`}
+                    style={
+                      isSelected
+                        ? {
+                            backgroundColor: c.bgStyle,
+                            borderColor: c.borderStyle,
+                          }
+                        : undefined
+                    }
+                    className={`px-2 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1.5 border transition max-w-[130px] ${
+                      isSelected
+                        ? "font-bold shadow-2xs"
+                        : "opacity-80 hover:opacity-100 bg-black/5 dark:bg-white/5 border-[#c59b27]/25"
+                    }`}
+                  >
+                    <span
+                      style={{ backgroundColor: c.hex }}
+                      className="w-2.5 h-2.5 rounded-full border border-black/20 shrink-0"
+                    />
+                    <span className="truncate">{c.label}</span>
+                  </button>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={onOpenColorManager}
+                title="Crea nuovi colori evidenziatore o rinomina le categorie"
+                className="px-2 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 border border-dashed border-[#c59b27]/55 text-[#8c1d14] dark:text-[#e5be67] hover:bg-[#c59b27]/15 transition"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Colore</span>
               </button>
             </div>
           )}
@@ -399,7 +428,7 @@ export function SidebarIndex({
               })
             )
           ) : (
-            /* TAB SEGNALIBRI PERSONALI ED EVIDENZIAZIONI FLUO */
+            /* TAB SEGNALIBRI PERSONALI ED EVIDENZIAZIONI CATEGORIZZATE */
             <div className="space-y-2.5 p-1">
               <div className="grid grid-cols-1 gap-1.5">
                 <button
@@ -469,11 +498,21 @@ export function SidebarIndex({
                     <span>Indietro</span>
                   </button>
                 </div>
+
+                {/* Pulsante per creare nuovi colori evidenziatore e nominare le categorie */}
+                <button
+                  type="button"
+                  onClick={onOpenColorManager}
+                  className="w-full py-2 px-3 rounded-xl border border-[#c59b27]/45 bg-[#8c1d14]/8 dark:bg-[#d4a74a]/10 hover:bg-[#8c1d14]/15 dark:hover:bg-[#d4a74a]/20 text-[#8c1d14] dark:text-[#e5be67] text-xs font-semibold flex items-center justify-center gap-2 transition"
+                >
+                  <Palette className="w-3.5 h-3.5 shrink-0" />
+                  <span>Personalizza Colori e Categorie ({highlightColors.length})</span>
+                </button>
               </div>
 
               <p className="text-[11px] opacity-65 px-1 leading-snug">
-                Suggerimento: puoi anche selezionare qualsiasi testo sul PDF
-                per evidenziarlo coi 4 colori fluo (Ctrl+Z per annullare).
+                Suggerimento: seleziona qualsiasi testo sul PDF per evidenziarlo
+                o crea categorie personalizzate per Azioni, Azioni Bonus, Incantesimi, ecc.
               </p>
 
               {filteredBookmarks.length === 0 ? (
@@ -486,8 +525,7 @@ export function SidebarIndex({
                   </p>
                   <p className="text-[11px] leading-relaxed">
                     Seleziona una frase sul manuale o usa lo strumento
-                    Evidenziatore per salvare passaggi con Giallo, Verde,
-                    Celeste o Rosa fluo.
+                    Evidenziatore per salvare e catalogare passaggi per colore.
                   </p>
                 </div>
               ) : (
@@ -498,7 +536,7 @@ export function SidebarIndex({
                     const isHighlight =
                       bm.type === "text" || bm.type === "area";
                     const colorCfg = isHighlight
-                      ? getHighlightColorConfig(bm.color)
+                      ? getHighlightColorConfig(bm.color, highlightColors)
                       : null;
 
                     return (
@@ -513,11 +551,12 @@ export function SidebarIndex({
                             : "border-[#c59b27]/35 hover:bg-[#c59b27]/10"
                         }`}
                       >
-                        {/* Barra laterale colorata per le evidenziazioni fluo */}
+                        {/* Barra laterale colorata per le evidenziazioni */}
                         {colorCfg && (
                           <span
                             aria-hidden="true"
-                            className={`absolute inset-y-0 left-0 w-1.5 ${colorCfg.swatchClass}`}
+                            style={{ backgroundColor: colorCfg.hex }}
+                            className="absolute inset-y-0 left-0 w-1.5"
                           />
                         )}
 
@@ -550,11 +589,23 @@ export function SidebarIndex({
                               </form>
                             ) : (
                               <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
                                   {colorCfg && (
                                     <span
-                                      className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${colorCfg.swatchClass}`}
-                                    />
+                                      style={{
+                                        backgroundColor: colorCfg.bgStyle,
+                                        borderColor: colorCfg.borderStyle,
+                                      }}
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border shrink-0"
+                                    >
+                                      <span
+                                        style={{
+                                          backgroundColor: colorCfg.hex,
+                                        }}
+                                        className="w-1.5 h-1.5 rounded-full"
+                                      />
+                                      {colorCfg.label}
+                                    </span>
                                   )}
                                   <p className="text-xs font-semibold truncate">
                                     {bm.label}
@@ -603,36 +654,49 @@ export function SidebarIndex({
                             </div>
                           </div>
 
-                          {/* Selettore rapido cambio colore fluo per le evidenziazioni */}
+                          {/* Selettore rapido cambio colore/categoria per le evidenziazioni */}
                           {isHighlight && (
                             <div
                               onClick={(e) => e.stopPropagation()}
-                              className="flex items-center justify-between pt-1 border-t border-current/5"
+                              className="flex items-center justify-between pt-1 border-t border-current/5 gap-2"
                             >
-                              <span className="text-[10px] opacity-50">
+                              <span className="text-[10px] opacity-50 shrink-0">
                                 {bm.type === "area"
-                                  ? "Riquadro evidenziato"
-                                  : "Testo evidenziato"}
+                                  ? "Riquadro"
+                                  : "Testo"}
                               </span>
-                              <div className="flex items-center gap-1">
-                                {HIGHLIGHT_COLORS.map((c) => (
+                              <div className="flex flex-wrap items-center gap-1">
+                                {highlightColors.map((c) => (
                                   <button
                                     key={c.id}
                                     type="button"
                                     onClick={() =>
                                       onUpdateBookmarkColor(bm.id, c.id)
                                     }
-                                    title={`Cambia colore in ${c.label}`}
-                                    aria-label={`Cambia colore in ${c.label}`}
-                                    className={`w-3.5 h-3.5 rounded-full transition-transform ${
-                                      c.swatchClass
-                                    } ${
+                                    title={`Cambia categoria in ${c.label}`}
+                                    aria-label={`Cambia categoria in ${c.label}`}
+                                    style={{
+                                      backgroundColor: c.hex,
+                                      boxShadow:
+                                        bm.color === c.id
+                                          ? `0 0 0 2px ${c.borderStyle}`
+                                          : undefined,
+                                    }}
+                                    className={`w-3.5 h-3.5 rounded-full border border-black/20 transition-transform ${
                                       bm.color === c.id
-                                        ? "scale-125 ring-1"
-                                        : "opacity-45 hover:opacity-100"
+                                        ? "scale-125"
+                                        : "opacity-55 hover:opacity-100"
                                     }`}
                                   />
                                 ))}
+                                <button
+                                  type="button"
+                                  onClick={onOpenColorManager}
+                                  title="Aggiungi o rinomina colori evidenziatore"
+                                  className="w-3.5 h-3.5 rounded-full border border-dashed border-current/45 flex items-center justify-center opacity-60 hover:opacity-100 transition"
+                                >
+                                  <Plus className="w-2.5 h-2.5" />
+                                </button>
                               </div>
                             </div>
                           )}

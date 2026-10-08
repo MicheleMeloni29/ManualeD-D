@@ -10,10 +10,17 @@ import {
 import type {
   BookmarkItem,
   HighlightColor,
+  HighlightColorConfig,
   NormalizedRect,
+} from "@/types/pdf";
+import {
+  DEFAULT_HIGHLIGHT_COLORS,
+  buildColorStylesFromHex,
+  getHighlightColorConfig,
 } from "@/types/pdf";
 
 const STORAGE_KEY_BOOKMARKS = "manuale_dnd_bookmarks_v1";
+const STORAGE_KEY_HIGHLIGHT_COLORS = "manuale_dnd_highlight_colors_v1";
 
 function loadInitialBookmarks(): BookmarkItem[] {
   if (typeof window === "undefined") return [];
@@ -29,6 +36,32 @@ function loadInitialBookmarks(): BookmarkItem[] {
     // Ignora errori di parsing/storage
   }
   return [];
+}
+
+function loadInitialHighlightColors(): HighlightColorConfig[] {
+  if (typeof window === "undefined") return DEFAULT_HIGHLIGHT_COLORS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_HIGHLIGHT_COLORS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((item: HighlightColorConfig) => {
+          const styles = buildColorStylesFromHex(item.hex || "#facc15");
+          return {
+            id: String(item.id),
+            label: String(item.label || "Evidenziatore"),
+            hex: styles.hex,
+            bgStyle: item.bgStyle || styles.bgStyle,
+            borderStyle: item.borderStyle || styles.borderStyle,
+            isCustom: Boolean(item.isCustom),
+          };
+        });
+      }
+    }
+  } catch {
+    // Ignora errori di parsing/storage
+  }
+  return DEFAULT_HIGHLIGHT_COLORS;
 }
 
 const emptySubscribe = () => () => {};
@@ -53,6 +86,10 @@ export function useBookmarks() {
   const [bookmarksState, setBookmarksState] =
     useState<BookmarkItem[]>(loadInitialBookmarks);
 
+  const [highlightColorsState, setHighlightColorsState] = useState<
+    HighlightColorConfig[]
+  >(loadInitialHighlightColors);
+
   // ID dell'evidenziazione temporaneamente messa in risalto (pulse) dopo un clic dalla sidebar
   const [focusedHighlightId, setFocusedHighlightId] = useState<string | null>(
     null
@@ -62,6 +99,11 @@ export function useBookmarks() {
   const bookmarks = useMemo(
     () => (isHydrated ? bookmarksState : []),
     [isHydrated, bookmarksState]
+  );
+
+  const highlightColors = useMemo(
+    () => (isHydrated ? highlightColorsState : DEFAULT_HIGHLIGHT_COLORS),
+    [isHydrated, highlightColorsState]
   );
 
   // Raggruppa per pagina tutte le evidenziazioni che possiedono coordinate geometriche sulla pagina
@@ -88,6 +130,93 @@ export function useBookmarks() {
       // Ignora errori di quota
     }
   }, []);
+
+  const persistHighlightColors = useCallback((next: HighlightColorConfig[]) => {
+    setHighlightColorsState(next);
+    try {
+      localStorage.setItem(STORAGE_KEY_HIGHLIGHT_COLORS, JSON.stringify(next));
+    } catch {
+      // Ignora errori di quota
+    }
+  }, []);
+
+  // Crea un nuovo colore evidenziatore personalizzato con nome categoria e tinta scelta dall'utente
+  const addHighlightColor = useCallback(
+    (label: string, hex: string): HighlightColorConfig => {
+      const trimmedLabel = label.trim() || "Nuova Categoria";
+      const styles = buildColorStylesFromHex(hex);
+      const newColor: HighlightColorConfig = {
+        id: `custom-${Date.now()}`,
+        label: trimmedLabel,
+        hex: styles.hex,
+        bgStyle: styles.bgStyle,
+        borderStyle: styles.borderStyle,
+        isCustom: true,
+      };
+      const updated = [...highlightColors, newColor];
+      persistHighlightColors(updated);
+      return newColor;
+    },
+    [highlightColors, persistHighlightColors]
+  );
+
+  // Rinomina o cambia la tinta di un colore evidenziatore esistente (inclusi i 4 colori base)
+  const updateHighlightColorMeta = useCallback(
+    (id: HighlightColor, updates: { label?: string; hex?: string }) => {
+      const updated = highlightColors.map((c) => {
+        if (c.id !== id) return c;
+        const nextLabel =
+          updates.label !== undefined
+            ? updates.label.trim() || c.label
+            : c.label;
+        if (updates.hex !== undefined) {
+          const styles = buildColorStylesFromHex(updates.hex);
+          return {
+            ...c,
+            label: nextLabel,
+            hex: styles.hex,
+            bgStyle: styles.bgStyle,
+            borderStyle: styles.borderStyle,
+          };
+        }
+        return {
+          ...c,
+          label: nextLabel,
+        };
+      });
+      persistHighlightColors(updated);
+    },
+    [highlightColors, persistHighlightColors]
+  );
+
+  // Elimina un colore personalizzato (riassegnando eventuali segnalibri che lo usavano al primo colore disponibile)
+  const removeHighlightColor = useCallback(
+    (id: HighlightColor) => {
+      const target = highlightColors.find((c) => c.id === id);
+      if (!target || !target.isCustom) return;
+      const remaining = highlightColors.filter((c) => c.id !== id);
+      const fallbackId = remaining[0]?.id ?? "yellow";
+      persistHighlightColors(
+        remaining.length > 0 ? remaining : DEFAULT_HIGHLIGHT_COLORS
+      );
+
+      // Se esistono segnalibri con il colore rimosso, li sposta sul colore di fallback
+      const hasAffected = bookmarks.some((b) => b.color === id);
+      if (hasAffected) {
+        persistBookmarks(
+          bookmarks.map((b) =>
+            b.color === id ? { ...b, color: fallbackId } : b
+          )
+        );
+      }
+    },
+    [highlightColors, bookmarks, persistHighlightColors, persistBookmarks]
+  );
+
+  // Ripristina i 4 colori base predefiniti mantenendo eventuali colori custom o resettando i nomi base
+  const resetHighlightColors = useCallback(() => {
+    persistHighlightColors(DEFAULT_HIGHLIGHT_COLORS);
+  }, [persistHighlightColors]);
 
   // Verifica se la pagina intera ha un segnalibro di pagina (escludendo le singole evidenziazioni di testo/area)
   const isPageBookmarked = useCallback(
@@ -163,13 +292,15 @@ export function useBookmarks() {
         ?.replace(/\s+/g, " ")
         .trim();
 
+      const colorCfg = getHighlightColorConfig(color, highlightColors);
+
       const autoLabel =
         label?.trim() ||
         (cleanSnippet
           ? cleanSnippet.length > 52
             ? `${cleanSnippet.slice(0, 52)}…`
             : cleanSnippet
-          : `Area evidenziata (Pag. ${pageNumber})`);
+          : `${colorCfg.label} (Pag. ${pageNumber})`);
 
       const newItem: BookmarkItem = {
         id: `bm-hl-${pageNumber}-${Date.now()}`,
@@ -190,7 +321,7 @@ export function useBookmarks() {
       focusHighlight(newItem.id);
       return newItem;
     },
-    [bookmarks, persistBookmarks, focusHighlight]
+    [bookmarks, highlightColors, persistBookmarks, focusHighlight]
   );
 
   const removeBookmark = useCallback(
@@ -249,6 +380,11 @@ export function useBookmarks() {
 
   return {
     bookmarks,
+    highlightColors,
+    addHighlightColor,
+    updateHighlightColorMeta,
+    removeHighlightColor,
+    resetHighlightColors,
     highlightsByPage,
     focusedHighlightId,
     focusHighlight,
