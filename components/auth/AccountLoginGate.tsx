@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Loader2 } from "lucide-react";
 
 export interface AccountLoginGateProps {
   isLoggingIn: boolean;
@@ -152,6 +152,109 @@ function D20Emblem() {
   );
 }
 
+const TROLL_TEXT = "D2------------------------------------------------povero illuso";
+const TROLL_CHARS = Array.from(TROLL_TEXT);
+const FLIGHT_DURATION_MS = 3600;
+
+/**
+ * Animazione matematica a 60/120fps tramite requestAnimationFrame:
+ * - Parte fuori dallo schermo a sinistra (`x = -width`)
+ * - Attraversa lo schermo lungo una traiettoria sinusoidale fluida fino a uscire a destra (`x = viewportWidth`)
+ * - Ogni singolo carattere ondeggia in sequenza ("ola" sinusoidale) mentre scorre
+ * - Sparisce automaticamente appena oltrepassa il bordo destro
+ */
+function TrollWaveFlight({ onComplete }: { onComplete: () => void }) {
+  const phraseRef = useRef<HTMLDivElement | null>(null);
+  const charRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  useEffect(() => {
+    let rafId = 0;
+    const startTime = performance.now();
+
+    const tick = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / FLIGHT_DURATION_MS);
+
+      const el = phraseRef.current;
+      if (el) {
+        const vw = window.innerWidth || 1200;
+        const textWidth = el.offsetWidth || 650;
+
+        // Parte completamente fuori a sinistra e termina completamente fuori a destra
+        const startX = -textWidth - 40;
+        const endX = vw + 40;
+        const currentX = startX + (endX - startX) * progress;
+
+        // Traiettoria sinusoidale globale dell'intera scritta (3.5 onde lungo lo schermo)
+        const waveTrajectoryAngle = progress * Math.PI * 3.5;
+        const trajectoryY = Math.sin(waveTrajectoryAngle) * 42;
+        const trajectoryTilt = Math.cos(waveTrajectoryAngle) * 4;
+
+        el.style.transform = `translate3d(${currentX.toFixed(1)}px, ${trajectoryY.toFixed(1)}px, 0) rotate(${trajectoryTilt.toFixed(2)}deg)`;
+        el.style.opacity = "1";
+
+        // Onda sequenziale sulle singole lettere
+        const baseCharPhase = progress * Math.PI * 11;
+        for (let i = 0; i < TROLL_CHARS.length; i++) {
+          const span = charRefs.current[i];
+          if (!span) continue;
+          const phase = baseCharPhase - i * 0.36;
+          const charY = Math.sin(phase) * 16;
+          const charRot = Math.cos(phase) * 7;
+          span.style.transform = `translate3d(0, ${charY.toFixed(1)}px, 0) rotate(${charRot.toFixed(1)}deg)`;
+        }
+      }
+
+      if (progress < 1) {
+        rafId = requestAnimationFrame(tick);
+      } else {
+        onCompleteRef.current();
+      }
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
+
+  return (
+    <div
+      role="alert"
+      aria-live="assertive"
+      className="pointer-events-none fixed inset-0 z-50 flex items-center overflow-hidden"
+    >
+      <div
+        ref={phraseRef}
+        style={{
+          transform: "translate3d(-120vw, 0, 0)",
+          opacity: 0,
+          willChange: "transform",
+        }}
+        className="font-dnd-display text-5xl sm:text-7xl md:text-8xl font-bold tracking-widest text-[#f604003f] whitespace-nowrap flex items-center"
+      >
+        {TROLL_CHARS.map((ch, idx) => (
+          <span
+            key={idx}
+            ref={(node) => {
+              charRefs.current[idx] = node;
+            }}
+            style={{
+              display: "inline-block",
+              willChange: "transform",
+            }}
+          >
+            {ch === " " ? "\u00A0" : ch}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Schermata di accesso minimale a tema Grimorio Scuro & Oro Antico D&D 5e.
  */
@@ -163,11 +266,27 @@ export function AccountLoginGate({
 }: AccountLoginGateProps) {
   const [masterName, setMasterName] = useState("");
   const [characterName, setCharacterName] = useState("");
+  const [trollRunId, setTrollRunId] = useState<number>(0);
+  const cardRef = useRef<HTMLDivElement | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!masterName.trim() || !characterName.trim() || isLoggingIn) return;
-    await onLogin(masterName, characterName);
+    const ok = await onLogin(masterName, characterName);
+    if (!ok) {
+      setTrollRunId((prev) => prev + 1);
+      cardRef.current?.animate(
+        [
+          { transform: "translate3d(0, 0, 0)" },
+          { transform: "translate3d(-10px, 0, 0) rotate(-1deg)" },
+          { transform: "translate3d(9px, 0, 0) rotate(1deg)" },
+          { transform: "translate3d(-7px, 0, 0) rotate(-0.6deg)" },
+          { transform: "translate3d(6px, 0, 0) rotate(0.6deg)" },
+          { transform: "translate3d(0, 0, 0)" },
+        ],
+        { duration: 460, easing: "cubic-bezier(0.36, 0.07, 0.19, 0.97)" }
+      );
+    }
   };
 
   return (
@@ -182,19 +301,26 @@ export function AccountLoginGate({
         className="pointer-events-none absolute inset-0 shadow-[inset_0_0_140px_rgba(0,0,0,0.92)]"
       />
 
-      {/* Placca Grimorio D&D con doppia cornice dorata e fregi angolari */}
-      <div className="relative z-10 w-full max-w-[390px] bg-[#120c0a]/95 border border-[#c59b27]/55 shadow-[0_30px_90px_-15px_rgba(0,0,0,0.95),0_0_40px_-10px_rgba(140,29,20,0.3)] px-7 py-9 sm:px-9 sm:py-11">
-        {/* Cornice interna incassata */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-2 border border-[#c59b27]/25"
+      {/* Animazione Troll volante fluida e ondeggiata da sinistra verso destra */}
+      {trollRunId > 0 && (
+        <TrollWaveFlight
+          key={`troll-fly-${trollRunId}`}
+          onComplete={() => setTrollRunId(0)}
         />
+      )}
 
-        {/* 4 Fregi angolari cesellati */}
-        <DndCornerOrnament className="absolute top-1.5 left-1.5" />
-        <DndCornerOrnament className="absolute top-1.5 right-1.5 rotate-90" />
-        <DndCornerOrnament className="absolute bottom-1.5 right-1.5 rotate-180" />
-        <DndCornerOrnament className="absolute bottom-1.5 left-1.5 -rotate-90" />
+      {/* Placca Grimorio D&D con unico bordo esterno sottile e fregi angolari */}
+      <div
+        ref={cardRef}
+        className={`relative z-10 w-full max-w-[390px] bg-[#120c0a]/95 border transition-colors duration-300 ${
+          trollRunId > 0 ? "border-[#b8281c]" : "border-[#c59b27]/25"
+        } shadow-[0_30px_90px_-15px_rgba(0,0,0,0.95),0_0_40px_-10px_rgba(140,29,20,0.3)] px-7 py-9 sm:px-9 sm:py-11`}
+      >
+        {/* 4 Fregi angolari cesellati allineati all'unico bordo esterno */}
+        <DndCornerOrnament className="absolute -top-[2px] -left-[2px]" />
+        <DndCornerOrnament className="absolute -top-[2px] -right-[2px] rotate-90" />
+        <DndCornerOrnament className="absolute -bottom-[2px] -right-[2px] rotate-180" />
+        <DndCornerOrnament className="absolute -bottom-[2px] -left-[2px] -rotate-90" />
 
         {/* Emblema d20 + Titolo scolpito */}
         <div className="relative flex flex-col items-center text-center mb-8">
@@ -260,17 +386,6 @@ export function AccountLoginGate({
               className="font-dnd-serif w-full px-4 py-2.5 bg-[#090605]/90 border border-[#c59b27]/40 text-center text-lg tracking-wider text-[#f7ecd8] placeholder:text-[#ede2d0]/20 focus:outline-none focus:border-[#e5be67] focus:shadow-[0_0_18px_-3px_rgba(212,167,74,0.35)] transition"
             />
           </div>
-
-          {/* Errore sintetico */}
-          {loginError && (
-            <div
-              role="alert"
-              className="font-dnd-serif flex items-center justify-center gap-2 px-3 py-2 bg-[#420c09]/80 border border-[#8c1d14] text-[#f9d2cc] text-sm text-center"
-            >
-              <AlertCircle className="w-4 h-4 text-[#e5be67] shrink-0" />
-              <span>{loginError}</span>
-            </div>
-          )}
 
           {/* Bottone ENTRA */}
           <button

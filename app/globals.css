@@ -280,3 +280,71 @@ body {
   transform-style: preserve-3d;
   animation: leafFlipBackward 460ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
 }
+
+/* ==========================================================================
+   ANIMAZIONE TROLL CREDENZIALI ERRATE ("povero illuso.....d2") & SHAKE CARD
+   ========================================================================== */
+
+@keyframes dndTrollFlyHorizontal {
+  0% {
+    transform: translate3d(-105vw, 0, 0);
+    opacity: 0;
+  }
+  6% {
+    opacity: 1;
+  }
+  94% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(105vw, 0, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes dndTrollWaveVertical {
+  0% {
+    transform: translate3d(0, -22px, 0) rotate(-3deg);
+  }
+  100% {
+    transform: translate3d(0, 22px, 0) rotate(3deg);
+  }
+}
+
+.animate-dnd-troll-fly-x {
+  animation: dndTrollFlyHorizontal 4.2s linear forwards;
+  will-change: transform, opacity;
+}
+
+.animate-dnd-troll-wave-y {
+  display: inline-block;
+  animation: dndTrollWaveVertical 680ms ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes dndCardShake {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  15% {
+    transform: translate3d(-11px, 0, 0) rotate(-1.2deg);
+  }
+  30% {
+    transform: translate3d(10px, 0, 0) rotate(1.2deg);
+  }
+  45% {
+    transform: translate3d(-8px, 0, 0) rotate(-0.8deg);
+  }
+  60% {
+    transform: translate3d(7px, 0, 0) rotate(0.8deg);
+  }
+  75% {
+    transform: translate3d(-4px, 0, 0) rotate(-0.4deg);
+  }
+}
+
+.animate-dnd-card-shake {
+  animation: dndCardShake 520ms cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
