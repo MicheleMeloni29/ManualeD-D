@@ -278,25 +278,25 @@ export function ControlBar({
 
   return (
     <>
-      {/* TOP BAR: Pulita ed essenziale sotto 1024px, completa e bilanciata su Desktop (>=1024px) */}
+      {/* TOP BAR: Pulita ed essenziale sotto 1024px, completa e bilanciata su ogni larghezza Desktop (>=1024px) */}
       <header
         className={`relative sticky top-0 z-30 h-14 border-b backdrop-blur-md transition-colors duration-200 select-none flex flex-col justify-between ${barSurface}`}
       >
-        <div className="flex-1 min-h-0 w-full max-w-[1800px] mx-auto px-3 sm:px-4 xl:px-5 flex items-center justify-between gap-2 lg:gap-3">
+        <div className="flex-1 min-h-0 w-full max-w-[1800px] mx-auto px-3 sm:px-4 lg:px-3.5 xl:px-5 flex items-center justify-between gap-2 xl:gap-3">
           {/* Sezione Sinistra: Toggle Indice (su Desktop) + Titolo Libro + Capitolo Attivo */}
-          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1 lg:min-w-[190px] xl:min-w-[240px]">
+          <div className="flex items-center gap-2 xl:gap-2.5 min-w-0 flex-1">
             {/* Su Desktop (>=1024px) il pulsante Indice sta nella Top Bar; sotto 1024px è nella Bottom Bar */}
             <button
               type="button"
               onClick={onToggleSidebar}
               aria-label="Apri o chiudi indice"
               title="Indice e Segnalibri (Scorciatoia: I)"
-              className={`hidden lg:flex p-2 rounded-lg transition-colors items-center gap-1.5 text-xs font-medium shrink-0 ${
+              className={`hidden lg:flex p-2 2xl:px-2.5 2xl:py-1.5 rounded-lg transition-colors items-center gap-1.5 text-xs font-medium shrink-0 ${
                 isSidebarOpen ? activeDndBtn : subtleBg
               }`}
             >
               <PanelLeft className="w-4 h-4 shrink-0" />
-              <span className="hidden xl:inline">Indice</span>
+              <span className="hidden 2xl:inline">Indice</span>
             </button>
 
             <div className="flex flex-col min-w-0 flex-1">
@@ -315,10 +315,10 @@ export function ControlBar({
           </div>
 
           {/* Sezione Centrale (Desktop >= 1024px): Navigazione Pagine, Zoom & Modalità Vista */}
-          <div className="hidden lg:flex items-center gap-1.5 xl:gap-2.5 shrink-0">
+          <div className="hidden lg:flex items-center gap-1.5 xl:gap-2 2xl:gap-2.5 shrink-0">
             {/* 1. Navigazione Pagine */}
             <div
-              className={`flex items-center gap-1 p-1 rounded-xl border shrink-0 ${pillGroupSurface}`}
+              className={`flex items-center gap-0.5 xl:gap-1 p-1 rounded-xl border shrink-0 ${pillGroupSurface}`}
             >
               <button
                 type="button"
@@ -337,7 +337,7 @@ export function ControlBar({
               >
                 <label
                   htmlFor="desktop-page-input"
-                  className="opacity-65 hidden 2xl:inline"
+                  className="opacity-65 hidden min-[1720px]:inline"
                 >
                   Pag.
                 </label>
@@ -349,12 +349,12 @@ export function ControlBar({
                   onChange={(e) => setEditingPageInput(e.target.value)}
                   onBlur={handlePageSubmit}
                   aria-label="Numero di pagina"
-                  className={`w-11 h-7 text-center rounded-md font-mono text-xs font-semibold border focus:outline-none focus:ring-2 focus:ring-[#9e1b1b]/60 transition shrink-0 ${inputSurface}`}
+                  className={`w-10 xl:w-11 h-7 text-center rounded-md font-mono text-xs font-semibold border focus:outline-none focus:ring-2 focus:ring-[#9e1b1b]/60 transition shrink-0 ${inputSurface}`}
                 />
                 {spreadPages.length === 2 && (
                   <span
                     title={`Facciata aperta: pagine ${spreadPages[0]} e ${spreadPages[1]}`}
-                    className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-[#9e1b1b]/10 text-[#8c1d14] dark:bg-[#d4a74a]/15 dark:text-[#e5be67] font-semibold whitespace-nowrap shrink-0"
+                    className="font-mono text-[11px] px-1 xl:px-1.5 py-0.5 rounded bg-[#9e1b1b]/10 text-[#8c1d14] dark:bg-[#d4a74a]/15 dark:text-[#e5be67] font-semibold whitespace-nowrap shrink-0"
                   >
                     –{spreadPages[1]}
                   </span>
@@ -390,7 +390,7 @@ export function ControlBar({
                 <ZoomOut className="w-4 h-4" />
               </button>
 
-              <span className="w-11 text-center font-mono text-xs font-semibold whitespace-nowrap shrink-0">
+              <span className="w-10 xl:w-11 text-center font-mono text-xs font-semibold whitespace-nowrap shrink-0">
                 {zoomPercentage}%
               </span>
 
@@ -416,14 +416,14 @@ export function ControlBar({
                     ? "Adatta pagina/libro allo schermo"
                     : "Adatta alla larghezza"
                 }
-                className={`px-2 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition whitespace-nowrap shrink-0 ${
+                className={`p-1.5 min-[1720px]:px-2 min-[1720px]:py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition whitespace-nowrap shrink-0 ${
                   zoomMode !== "custom"
                     ? activeDndBtn
                     : "hover:bg-black/5 dark:hover:bg-white/10 opacity-80"
                 }`}
               >
                 <Maximize2 className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden 2xl:inline">
+                <span className="hidden min-[1720px]:inline">
                   {zoomMode === "fit-page" ? "Pagina" : "Adatta"}
                 </span>
               </button>
@@ -437,7 +437,7 @@ export function ControlBar({
                 type="button"
                 onClick={() => onViewModeChange("continuous")}
                 title="Scorrimento verticale continuo"
-                className={`px-2 xl:px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition whitespace-nowrap shrink-0 ${
+                className={`p-1.5 xl:px-2.5 xl:py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition whitespace-nowrap shrink-0 ${
                   viewMode === "continuous"
                     ? activeDndBtn
                     : "opacity-75 hover:opacity-100"
@@ -450,7 +450,7 @@ export function ControlBar({
                 type="button"
                 onClick={() => onViewModeChange("single")}
                 title="Modalità Pagina Singola"
-                className={`px-2 xl:px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition whitespace-nowrap shrink-0 ${
+                className={`p-1.5 xl:px-2.5 xl:py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition whitespace-nowrap shrink-0 ${
                   viewMode === "single"
                     ? activeDndBtn
                     : "opacity-75 hover:opacity-100"
@@ -463,7 +463,7 @@ export function ControlBar({
                 type="button"
                 onClick={() => onViewModeChange("book")}
                 title="Modalità Libro Sfogliabile 3D (Doppia pagina)"
-                className={`px-2 xl:px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition whitespace-nowrap shrink-0 ${
+                className={`p-1.5 xl:px-2.5 xl:py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition whitespace-nowrap shrink-0 ${
                   viewMode === "book"
                     ? activeDndBtn
                     : "opacity-75 hover:opacity-100"
@@ -476,17 +476,17 @@ export function ControlBar({
           </div>
 
           {/* Sezione Destra: Azioni rapide su Mobile/Tablet (Segnalibro + Evidenziatore) e set completo compatto su Desktop */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 xl:gap-1.5 shrink-0">
             {/* Strumento Evidenziatore ad Area (Stabile in larghezza: i colori sono nel banner flottante) */}
             <div
-              className={`flex items-center gap-1 p-1 rounded-xl border shrink-0 ${pillGroupSurface}`}
+              className={`flex items-center gap-0.5 xl:gap-1 p-1 rounded-xl border shrink-0 ${pillGroupSurface}`}
             >
               <button
                 type="button"
                 onClick={onToggleAreaHighlightMode}
                 aria-label="Attiva o disattiva evidenziatore ad area"
                 title="Evidenziatore ad Area (Riquadra una parte della pagina per salvarla nei segnalibri — Scorciatoia: H)"
-                className={`px-2 sm:px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
+                className={`px-2 py-1.5 2xl:px-2.5 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
                   isAreaHighlightMode
                     ? "bg-amber-400 text-stone-950 font-semibold shadow-xs ring-2 ring-amber-500/60"
                     : subtleBg
@@ -548,12 +548,12 @@ export function ControlBar({
               onClick={onToggleSearch}
               aria-label="Cerca nel documento"
               title="Cerca nel manuale (Ctrl+F)"
-              className={`hidden lg:flex px-2.5 py-2 rounded-lg transition-colors items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
+              className={`hidden lg:flex p-2 2xl:px-2.5 2xl:py-2 rounded-lg transition-colors items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0 ${
                 isSearchOpen ? activeDndBtn : subtleBg
               }`}
             >
               <Search className="w-4 h-4 shrink-0" />
-              <span className="hidden xl:inline">Cerca</span>
+              <span className="hidden 2xl:inline">Cerca</span>
               {searchMatchesCount > 0 && (
                 <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-[#d4a74a] text-[#1c120a] font-bold">
                   {searchMatchesCount}
@@ -561,18 +561,18 @@ export function ControlBar({
               )}
             </button>
 
-            {/* Pulsante Scheda Personaggio D&D 5e (Desktop >=1024px) */}
+            {/* Pulsante Scheda Personaggio D&D 5e (Desktop >=1024px: solo icona a 1024px, icona+nome da 1280px) */}
             <button
               type="button"
               onClick={onToggleCharacterSheet}
               aria-label="Apri o chiudi la Scheda Personaggio"
-              title="Scheda Personaggio D&D 5e (Tasto rapido: C)"
-              className={`hidden lg:flex px-2.5 py-2 rounded-lg transition-colors items-center gap-1.5 text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer ${
+              title={`Scheda Personaggio D&D 5e: ${characterName?.trim() || "Scheda PG"} (Tasto rapido: C)`}
+              className={`hidden lg:flex p-2 xl:px-2.5 xl:py-2 rounded-lg transition-colors items-center gap-1.5 text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer ${
                 isCharacterSheetOpen ? activeDndBtn : subtleBg
               }`}
             >
               <Shield className="w-4 h-4 shrink-0" />
-              <span className="max-w-[110px] truncate">
+              <span className="hidden xl:inline max-w-[92px] 2xl:max-w-[115px] truncate">
                 {characterName?.trim() || "Scheda PG"}
               </span>
             </button>
@@ -587,12 +587,12 @@ export function ControlBar({
                 }}
                 aria-label={`Tema di lettura: ${currentThemeOption.fullLabel}`}
                 title={`Tema di lettura (${currentThemeOption.fullLabel})`}
-                className={`px-2.5 py-2 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium whitespace-nowrap ${
+                className={`p-2 min-[1720px]:px-2.5 min-[1720px]:py-2 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium whitespace-nowrap ${
                   desktopThemeMenuOpen ? activeDndBtn : subtleBg
                 }`}
               >
                 <CurrentThemeIcon className="w-4 h-4 shrink-0" />
-                <span className="hidden 2xl:inline">
+                <span className="hidden min-[1720px]:inline">
                   {currentThemeOption.shortLabel}
                 </span>
               </button>
@@ -648,7 +648,7 @@ export function ControlBar({
                   }}
                   aria-label="Profilo Account e Salvataggio Cloud"
                   title={`Account: ${session.characterName} (Master: ${session.masterName})`}
-                  className={`px-2.5 py-2 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium whitespace-nowrap cursor-pointer ${
+                  className={`p-2 2xl:px-2.5 2xl:py-2 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium whitespace-nowrap cursor-pointer ${
                     desktopAccountMenuOpen ? activeDndBtn : subtleBg
                   }`}
                 >
@@ -659,7 +659,7 @@ export function ControlBar({
                   ) : (
                     <CloudCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   )}
-                  <span className="hidden xl:inline max-w-[96px] truncate font-semibold">
+                  <span className="hidden 2xl:inline max-w-[90px] truncate font-semibold">
                     {session.characterName}
                   </span>
                 </button>

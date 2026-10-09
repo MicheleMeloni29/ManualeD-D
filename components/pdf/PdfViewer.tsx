@@ -94,6 +94,7 @@ interface PendingTextSelection {
   rects: NormalizedRect[];
   popupX: number;
   popupY: number;
+  placeBelow?: boolean;
 }
 
 /**
@@ -389,14 +390,20 @@ export default function PdfViewer({
     }
 
     const boundingRect = range.getBoundingClientRect();
+    const vw = window.visualViewport?.width ?? window.innerWidth;
+    const vh = window.visualViewport?.height ?? window.innerHeight;
+    const halfMaxMenuWidth = Math.min(165, Math.floor((vw - 24) / 2));
     const popupX = Math.max(
-      140,
+      12 + halfMaxMenuWidth,
       Math.min(
-        window.innerWidth - 140,
+        vw - 12 - halfMaxMenuWidth,
         boundingRect.left + boundingRect.width / 2
       )
     );
-    const popupY = Math.max(70, boundingRect.top - 10);
+    const placeBelow = boundingRect.top < 116;
+    const popupY = placeBelow
+      ? Math.min(vh - 80, boundingRect.bottom + 10)
+      : Math.max(68, boundingRect.top - 10);
 
     setPendingSelection({
       pageNumber,
@@ -404,6 +411,7 @@ export default function PdfViewer({
       rects: mergedRects,
       popupX,
       popupY,
+      placeBelow,
     });
   }, [isAreaHighlightMode]);
 
@@ -554,9 +562,12 @@ export default function PdfViewer({
     touchStartXRef.current = null;
     touchStartYRef.current = null;
 
-    // 1. Verifica Doppio Tap
+    // 1. Verifica Doppio Tap (ignorando i tocchi sulle aree già evidenziate)
+    const tappedHighlight = (e.target as HTMLElement | null)?.closest(
+      "[data-highlight-id]"
+    );
     const now = Date.now();
-    if (Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15) {
+    if (!tappedHighlight && Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15) {
       const prevTap = lastTapPosRef.current;
       if (
         now - lastTapTimeRef.current < 280 &&
@@ -710,10 +721,12 @@ export default function PdfViewer({
           style={{
             left: `${pendingSelection.popupX}px`,
             top: `${pendingSelection.popupY}px`,
-            transform: "translate(-50%, -100%)",
+            transform: pendingSelection.placeBelow
+              ? "translate(-50%, 0)"
+              : "translate(-50%, -100%)",
           }}
           onMouseDown={(e) => e.preventDefault()}
-          className={`fixed z-50 flex items-center gap-2 px-3 py-2 rounded-2xl border shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 ${floatingSurface}`}
+          className={`fixed z-50 w-max max-w-[calc(100vw-24px)] flex flex-wrap items-center justify-center gap-2 px-3 py-2 rounded-2xl border shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 ${floatingSurface}`}
         >
           <Highlighter className="w-3.5 h-3.5 text-[#8c1d14] dark:text-[#d4a74a] shrink-0" />
           <span className="text-[11px] font-semibold mr-0.5">Evidenzia:</span>
