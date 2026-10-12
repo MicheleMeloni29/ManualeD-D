@@ -445,7 +445,7 @@ export function SidebarIndex({
           ) : (
             /* TAB SEGNALIBRI PERSONALI ED EVIDENZIAZIONI CATEGORIZZATE */
             <div className="space-y-2.5 p-1">
-              <div className="grid grid-cols-1 gap-1.5">
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-1.5">
                 <button
                   type="button"
                   onClick={onToggleCurrentPageBookmark}
@@ -455,15 +455,15 @@ export function SidebarIndex({
                       : "border-dashed border-[#c59b27]/50 hover:border-[#8c1d14] hover:bg-[#c59b27]/10"
                   }`}
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>
+                  <Plus className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">
                     {isCurrentPageBookmarked
                       ? `Rimuovi Pagina ${currentPage} intera`
                       : `Salva Pagina ${currentPage} intera`}
                   </span>
                 </button>
 
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 min-w-0">
                   <button
                     type="button"
                     onClick={() => {
@@ -475,7 +475,7 @@ export function SidebarIndex({
                         onClose();
                       }
                     }}
-                    className={`flex-1 py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition ${
+                    className={`flex-1 min-w-0 py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition ${
                       isAreaHighlightMode
                         ? "bg-amber-400 text-stone-950 border-amber-500 shadow-xs"
                         : "border-[#c59b27]/40 bg-black/5 dark:bg-white/5 hover:bg-[#c59b27]/15"
@@ -521,7 +521,9 @@ export function SidebarIndex({
                   className="w-full py-2 px-3 rounded-xl border border-[#c59b27]/45 bg-[#8c1d14]/8 dark:bg-[#d4a74a]/10 hover:bg-[#8c1d14]/15 dark:hover:bg-[#d4a74a]/20 text-[#8c1d14] dark:text-[#e5be67] text-xs font-semibold flex items-center justify-center gap-2 transition"
                 >
                   <Palette className="w-3.5 h-3.5 shrink-0" />
-                  <span>Personalizza Colori e Categorie ({highlightColors.length})</span>
+                  <span className="truncate">
+                    Personalizza Colori ({highlightColors.length})
+                  </span>
                 </button>
               </div>
 
@@ -544,7 +546,7 @@ export function SidebarIndex({
                   </p>
                 </div>
               ) : (
-                <div className="space-y-1.5">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,250px),1fr))] gap-2 items-start">
                   {filteredBookmarks.map((bm) => {
                     const isCurrent = bm.pageNumber === currentPage;
                     const isEditing = editingBookmarkId === bm.id;
@@ -602,8 +604,8 @@ export function SidebarIndex({
                                 <button
                                   type="submit"
                                   onMouseDown={(e) => e.preventDefault()}
-                                  title="Salva nome"
-                                  aria-label="Salva nome"
+                                  title="Salva modifiche"
+                                  aria-label="Salva modifiche"
                                   className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0"
                                 >
                                   <Check className="w-4 h-4" />
@@ -615,8 +617,8 @@ export function SidebarIndex({
                                     e.stopPropagation();
                                     setEditingBookmarkId(null);
                                   }}
-                                  title="Annulla modifica"
-                                  aria-label="Annulla modifica"
+                                  title="Chiudi modifica"
+                                  aria-label="Chiudi modifica"
                                   className="p-1.5 rounded-lg opacity-65 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 shrink-0"
                                 >
                                   <X className="w-4 h-4" />
@@ -673,8 +675,8 @@ export function SidebarIndex({
                                 <button
                                   type="button"
                                   onClick={(e) => startEditing(bm, e)}
-                                  title="Rinomina o aggiungi nota"
-                                  aria-label={`Rinomina ${bm.label}`}
+                                  title="Modifica nome o colore categoria"
+                                  aria-label={`Modifica ${bm.label}`}
                                   className="p-1.5 rounded-lg opacity-80 lg:opacity-0 lg:group-hover:opacity-75 hover:!opacity-100 hover:bg-black/10 dark:hover:bg-white/10 active:scale-95 transition"
                                 >
                                   <Edit3 className="w-3.5 h-3.5" />
@@ -696,14 +698,14 @@ export function SidebarIndex({
                             </div>
                           </div>
 
-                          {/* Selettore rapido cambio colore/categoria per le evidenziazioni */}
-                          {isHighlight && (
+                          {/* Selettore rapido cambio colore/categoria visibile SOLO durante la modifica del segnalibro */}
+                          {isEditing && isHighlight && (
                             <div
                               onClick={(e) => e.stopPropagation()}
                               onPointerDown={(e) => e.stopPropagation()}
-                              className="flex items-center justify-between pt-1 border-t border-current/5 gap-2"
+                              className="flex items-center justify-between pt-1.5 border-t border-current/10 gap-2"
                             >
-                              <span className="text-[10px] opacity-50 shrink-0">
+                              <span className="text-[10px] opacity-60 shrink-0">
                                 {bm.type === "area"
                                   ? "Riquadro"
                                   : "Testo"}
@@ -713,6 +715,7 @@ export function SidebarIndex({
                                   <button
                                     key={c.id}
                                     type="button"
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={() =>
                                       onUpdateBookmarkColor(bm.id, c.id)
                                     }
@@ -734,6 +737,7 @@ export function SidebarIndex({
                                 ))}
                                 <button
                                   type="button"
+                                  onMouseDown={(e) => e.preventDefault()}
                                   onClick={onOpenColorManager}
                                   title="Aggiungi o rinomina colori evidenziatore"
                                   className="w-4 h-4 rounded-full border border-dashed border-current/45 flex items-center justify-center opacity-70 hover:opacity-100 transition"

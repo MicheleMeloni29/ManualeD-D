@@ -14,7 +14,7 @@ const STORAGE_KEY_PANEL_WIDTHS = "manuale_dnd_panel_widths_v1";
 export const DESKTOP_MIN_VIEWPORT = 1024;
 export const SIDEBAR_DEFAULT_WIDTH = 320;
 export const SIDEBAR_MIN_WIDTH = 220;
-export const SIDEBAR_MAX_WIDTH = 640;
+export const SIDEBAR_MAX_WIDTH = 1100;
 
 export const SHEET_DEFAULT_WIDTH = 640;
 export const SHEET_MIN_WIDTH = 360;
