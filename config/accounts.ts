@@ -1,13 +1,22 @@
 /**
  * Configurazione centrale dei 6 Account del Party D&D.
  *
- * ISTRUZIONI PER IL MASTER:
- * 1. Imposta `DEFAULT_MASTER_NAME` con il tuo nome da Dungeon Master.
- * 2. Modifica il campo `characterName` di ciascuno dei 6 account con il nome
- *    del personaggio scelto da ogni giocatore.
+ * SICUREZZA & PRIVACY (Repository GitHub Pubblica):
+ * Nessuna credenziale reale è salvata in questo file.
+ * I nomi reali del Master e dei 6 Personaggi vengono letti lato server
+ * dalle variabili d'ambiente definite in `.env.local` (in locale) e
+ * nelle "Environment Variables" del progetto su Vercel (in produzione):
+ *
+ *   DND_MASTER_NAME="..."
+ *   DND_CHARACTER_1="..."
+ *   DND_CHARACTER_2="..."
+ *   DND_CHARACTER_3="..."
+ *   DND_CHARACTER_4="..."
+ *   DND_CHARACTER_5="..."
+ *   DND_CHARACTER_6="..."
  *
  * NOTA: Il controllo delle credenziali ignora automaticamente maiuscole/minuscole,
- * accenti e spazi iniziali/finali o doppi (es. "Thorin  Scudodiquercia" == "thorin scudodiquercia").
+ * accenti e spazi iniziali/finali o doppi.
  */
 
 export interface AccountConfig {
@@ -17,7 +26,7 @@ export interface AccountConfig {
   masterName: string;
   /** Nome del Personaggio (usato come seconda credenziale di accesso e nome iniziale scheda) */
   characterName: string;
-  /** Etichetta descrittiva dello slot (es. "Giocatore 1") */
+  /** Etichetta descrittiva dello slot (es. "Avventuriero 1") */
   slotLabel: string;
 }
 
@@ -28,54 +37,7 @@ export interface PublicAccountProfile {
   slotLabel: string;
 }
 
-/**
- * Nome predefinito del Dungeon Master per tutta la campagna.
- * Puoi cambiarlo qui una volta sola per tutti e 6 gli account!
- */
-export const DEFAULT_MASTER_NAME = "Reus";
-
-/**
- * Elenco dei 6 Account della campagna D&D.
- * Sostituisci `characterName` con i nomi reali dei 6 personaggi del tuo gruppo.
- */
-export const DND_ACCOUNTS: AccountConfig[] = [
-  {
-    id: "account-1",
-    masterName: DEFAULT_MASTER_NAME,
-    characterName: "Vaghar",
-    slotLabel: "Avventuriero 1",
-  },
-  {
-    id: "account-2",
-    masterName: DEFAULT_MASTER_NAME,
-    characterName: "Elarion",
-    slotLabel: "Avventuriero 2",
-  },
-  {
-    id: "account-3",
-    masterName: DEFAULT_MASTER_NAME,
-    characterName: "Sennar",
-    slotLabel: "Avventuriero 3",
-  },
-  {
-    id: "account-4",
-    masterName: DEFAULT_MASTER_NAME,
-    characterName: "Merezius",
-    slotLabel: "Avventuriero 4",
-  },
-  {
-    id: "account-5",
-    masterName: DEFAULT_MASTER_NAME,
-    characterName: "Ozzy",
-    slotLabel: "Avventuriero 5",
-  },
-  {
-    id: "account-6",
-    masterName: DEFAULT_MASTER_NAME,
-    characterName: "Master",
-    slotLabel: "Avventuriero 6",
-  },
-];
+const TOTAL_PARTY_SLOTS = 6;
 
 /**
  * Normalizza una stringa credenziale per confronti case-insensitive,
@@ -91,10 +53,14 @@ export function normalizeCredential(input: string): string {
 }
 
 /**
- * Restituisce la lista degli account attivi (supporta anche un eventuale override
- * tramite variabile d'ambiente `DND_ACCOUNTS_JSON` su Vercel).
+ * Costruisce dinamicamente la lista dei 6 account leggendo le variabili d'ambiente
+ * lato server (`DND_MASTER_NAME` e `DND_CHARACTER_1` ... `DND_CHARACTER_6`).
+ * Supporta anche `DND_MASTER_1` ... `DND_MASTER_6` se si volessero master distinti,
+ * oppure `DND_ACCOUNTS_JSON` come override avanzato.
  */
 export function getConfiguredAccounts(): AccountConfig[] {
+  const defaultMaster = (process.env.DND_MASTER_NAME ?? "").trim();
+
   const envJson = process.env.DND_ACCOUNTS_JSON;
   if (envJson) {
     try {
@@ -102,21 +68,39 @@ export function getConfiguredAccounts(): AccountConfig[] {
       if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed.map((item, idx) => ({
           id: String(item.id || `account-${idx + 1}`),
-          masterName: String(item.masterName || DEFAULT_MASTER_NAME),
-          characterName: String(item.characterName || `Personaggio ${idx + 1}`),
+          masterName: String(item.masterName || defaultMaster).trim(),
+          characterName: String(item.characterName || "").trim(),
           slotLabel: String(item.slotLabel || `Avventuriero ${idx + 1}`),
         }));
       }
     } catch {
-      // Fallback alla configurazione statica in caso di JSON non valido
+      // Fallback alle variabili DND_CHARACTER_1..6 in caso di JSON non valido
     }
   }
-  return DND_ACCOUNTS;
+
+  const accounts: AccountConfig[] = [];
+  for (let i = 1; i <= TOTAL_PARTY_SLOTS; i++) {
+    const slotMaster = (
+      process.env[`DND_MASTER_${i}`] ??
+      defaultMaster
+    ).trim();
+    const slotCharacter = (process.env[`DND_CHARACTER_${i}`] ?? "").trim();
+
+    accounts.push({
+      id: `account-${i}`,
+      masterName: slotMaster,
+      characterName: slotCharacter,
+      slotLabel: `Avventuriero ${i}`,
+    });
+  }
+
+  return accounts;
 }
 
 /**
  * Verifica la coppia (Nome del Master, Nome Personaggio) e restituisce il profilo pubblico
- * dell'account corrispondente, oppure `null` se le credenziali non coincidono.
+ * dell'account corrispondente, oppure `null` se le credenziali non coincidono
+ * o se lo slot non è stato configurato nelle variabili d'ambiente.
  */
 export function verifyAccountCredentials(
   masterNameInput: string,
@@ -128,11 +112,13 @@ export function verifyAccountCredentials(
   if (!normMaster || !normChar) return null;
 
   const accounts = getConfiguredAccounts();
-  const matched = accounts.find(
-    (acc) =>
-      normalizeCredential(acc.masterName) === normMaster &&
-      normalizeCredential(acc.characterName) === normChar
-  );
+  const matched = accounts.find((acc) => {
+    const accMaster = normalizeCredential(acc.masterName);
+    const accChar = normalizeCredential(acc.characterName);
+    // Se una variabile d'ambiente è vuota/non configurata, impedisce qualsiasi accesso a quello slot
+    if (!accMaster || !accChar) return false;
+    return accMaster === normMaster && accChar === normChar;
+  });
 
   if (!matched) return null;
 

@@ -46,6 +46,7 @@ export interface SidebarIndexProps {
   lastHighlightLabel?: string;
   onUndoLastHighlight: () => void;
   resolvedTheme: "light" | "dark" | "sepia";
+  desktopWidth?: number;
 }
 
 export function SidebarIndex({
@@ -70,6 +71,7 @@ export function SidebarIndex({
   lastHighlightLabel,
   onUndoLastHighlight,
   resolvedTheme,
+  desktopWidth = 320,
 }: SidebarIndexProps) {
   const [activeTab, setActiveTab] = useState<"outline" | "bookmarks">(
     "outline"
@@ -187,7 +189,12 @@ export function SidebarIndex({
       {/* Drawer su Mobile/Tablet (< 1024px) / Sidebar laterale su Desktop (>= 1024px) */}
       <aside
         aria-label="Indice del libro e segnalibri"
-        className={`fixed lg:static inset-y-0 left-0 z-50 lg:z-20 w-[85vw] max-w-[330px] lg:w-80 shrink-0 border-r flex flex-col h-full transition-colors select-none ${panelBg}`}
+        style={
+          {
+            "--sidebar-desktop-width": `${desktopWidth}px`,
+          } as React.CSSProperties
+        }
+        className={`fixed lg:static inset-y-0 left-0 z-50 lg:z-20 w-[85vw] max-w-[330px] lg:w-(--sidebar-desktop-width) lg:max-w-none shrink-0 border-r flex flex-col h-full transition-colors select-none ${panelBg}`}
       >
         {/* Header Sidebar con Tab Switcher */}
         <div className="p-3 border-b border-[#c59b27]/35 flex flex-col gap-2.5">

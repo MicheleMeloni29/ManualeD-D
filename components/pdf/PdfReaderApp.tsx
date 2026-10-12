@@ -29,6 +29,13 @@ import {
 import { useThemeMode } from "@/hooks/useThemeMode";
 import { useCharacterSheet } from "@/hooks/useCharacterSheet";
 import {
+  useResizablePanels,
+  SIDEBAR_MIN_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  SHEET_MIN_WIDTH,
+  SHEET_MAX_WIDTH,
+} from "@/hooks/useResizablePanels";
+import {
   useAccountAuth,
   useAccountCloudSync,
 } from "@/hooks/useAccountAuth";
@@ -43,6 +50,7 @@ import { SidebarIndex } from "./SidebarIndex";
 import { SearchModal } from "./SearchModal";
 import { HighlightColorManagerModal } from "./HighlightColorManagerModal";
 import { CharacterSheetPanel } from "./CharacterSheetPanel";
+import { PanelResizeHandle } from "./PanelResizeHandle";
 
 // Importazione dinamica client-only per evitare l'esecuzione SSR di PDF.js
 const PdfViewer = dynamic(() => import("./PdfViewer"), {
@@ -153,6 +161,23 @@ function AuthenticatedPdfReader({
   const characterSheet = useCharacterSheet({
     accountId: session.accountId,
     defaultCharacterName: session.characterName,
+  });
+
+  const {
+    effectiveSidebarWidth,
+    effectiveCharacterSheetWidth,
+    activeDragPanel,
+    startResizeSidebar,
+    startResizeCharacterSheet,
+    resetSidebarWidth,
+    resetCharacterSheetWidth,
+    nudgeSidebarWidth,
+    nudgeCharacterSheetWidth,
+  } = useResizablePanels({
+    accountId: session.accountId,
+    isSidebarOpen,
+    isCharacterSheetOpen,
+    isCharacterSheetExpanded,
   });
 
   const {
@@ -526,7 +551,23 @@ function AuthenticatedPdfReader({
           lastHighlightLabel={lastHighlight?.label}
           onUndoLastHighlight={undoLastHighlight}
           resolvedTheme={resolvedTheme}
+          desktopWidth={effectiveSidebarWidth}
         />
+
+        {isSidebarOpen && (
+          <PanelResizeHandle
+            side="left"
+            label="Ridimensiona larghezza Indice"
+            currentWidth={effectiveSidebarWidth}
+            minWidth={SIDEBAR_MIN_WIDTH}
+            maxWidth={SIDEBAR_MAX_WIDTH}
+            isDragging={activeDragPanel === "sidebar"}
+            resolvedTheme={resolvedTheme}
+            onPointerDown={startResizeSidebar}
+            onDoubleClick={resetSidebarWidth}
+            onKeyboardNudge={nudgeSidebarWidth}
+          />
+        )}
 
         <main className="flex-1 flex flex-col min-w-0 min-h-0 relative">
           <PdfViewer
@@ -585,6 +626,21 @@ function AuthenticatedPdfReader({
           />
         </main>
 
+        {isCharacterSheetOpen && !isCharacterSheetExpanded && (
+          <PanelResizeHandle
+            side="right"
+            label="Ridimensiona larghezza Scheda Giocatore"
+            currentWidth={effectiveCharacterSheetWidth}
+            minWidth={SHEET_MIN_WIDTH}
+            maxWidth={SHEET_MAX_WIDTH}
+            isDragging={activeDragPanel === "characterSheet"}
+            resolvedTheme={resolvedTheme}
+            onPointerDown={startResizeCharacterSheet}
+            onDoubleClick={resetCharacterSheetWidth}
+            onKeyboardNudge={nudgeCharacterSheetWidth}
+          />
+        )}
+
         <CharacterSheetPanel
           isOpen={isCharacterSheetOpen}
           isExpanded={isCharacterSheetExpanded}
@@ -595,6 +651,7 @@ function AuthenticatedPdfReader({
           }}
           resolvedTheme={resolvedTheme}
           onSearchInManual={handleSearchFromCharacterSheet}
+          desktopWidth={effectiveCharacterSheetWidth}
           {...characterSheet}
         />
 

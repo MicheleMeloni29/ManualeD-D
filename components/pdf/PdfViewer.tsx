@@ -255,6 +255,7 @@ export default function PdfViewer({
     const container = scrollContainerRef.current;
     if (!container) return;
 
+    let rafId: number | null = null;
     const updateSize = () => {
       onContainerResize({
         width: container.clientWidth,
@@ -265,11 +266,15 @@ export default function PdfViewer({
     updateSize();
 
     const observer = new ResizeObserver(() => {
-      updateSize();
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(updateSize);
     });
     observer.observe(container);
 
-    return () => observer.disconnect();
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
   }, [onContainerResize]);
 
   // Gestione Zoom tramite Rotella del Mouse e Pinch sul Trackpad (listener non-passive)

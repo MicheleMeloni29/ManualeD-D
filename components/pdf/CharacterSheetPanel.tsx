@@ -57,6 +57,7 @@ export interface CharacterSheetPanelProps {
   importFromPdfFile: (file: File) => Promise<void>;
   exportToPdfFile: () => Promise<void>;
   resetSheet: () => void;
+  desktopWidth?: number;
 }
 
 export function CharacterSheetPanel({
@@ -78,6 +79,7 @@ export function CharacterSheetPanel({
   importFromPdfFile,
   exportToPdfFile,
   resetSheet,
+  desktopWidth = 640,
 }: CharacterSheetPanelProps) {
   const [confirmReset, setConfirmReset] = useState(false);
   const [containerWidth, setContainerWidth] = useState<number>(620);
@@ -94,6 +96,7 @@ export function CharacterSheetPanel({
     const el = scrollContainerRef.current;
     if (!el) return;
 
+    let rafId: number | null = null;
     const updateSize = () => {
       const w = el.clientWidth;
       if (w > 0) {
@@ -102,9 +105,15 @@ export function CharacterSheetPanel({
     };
     updateSize();
 
-    const observer = new ResizeObserver(updateSize);
+    const observer = new ResizeObserver(() => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(updateSize);
+    });
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
   }, [isOpen, isExpanded]);
 
   const fitWidth = Math.max(300, Math.min(1150, containerWidth - 28));
@@ -181,11 +190,18 @@ export function CharacterSheetPanel({
   return (
     <aside
       aria-label="Scheda Personaggio D&D 5e PDF"
+      style={
+        !isExpanded
+          ? ({
+              "--sheet-desktop-width": `${desktopWidth}px`,
+            } as React.CSSProperties)
+          : undefined
+      }
       className={`${
         isExpanded
           ? "fixed inset-0 z-50 w-full h-dvh"
-          : "fixed inset-0 z-40 w-full h-dvh lg:static lg:z-20 lg:w-[580px] xl:w-[680px] 2xl:w-[780px] lg:h-full lg:border-l"
-      } flex flex-col overflow-hidden shadow-2xl transition-all duration-200 ${panelBg}`}
+          : "fixed inset-0 z-40 w-full h-dvh lg:static lg:z-20 lg:w-(--sheet-desktop-width) lg:shrink-0 lg:h-full lg:border-l"
+      } flex flex-col overflow-hidden shadow-2xl transition-colors duration-200 ${panelBg}`}
     >
       {/* Input file nascosto per Importa PDF */}
       <input
